@@ -1,0 +1,3 @@
+2025-11-10 22:00:48,507 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:00:57,962 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:01:10,984 | INFO | api_logger | /predict request processed in 1.1725s
