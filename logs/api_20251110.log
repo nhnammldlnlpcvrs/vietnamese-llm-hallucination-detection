@@ -1,3 +1,55 @@
 2025-11-10 22:00:48,507 | INFO | api_logger | Tokenizer loaded and special tokens added
 2025-11-10 22:00:57,962 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
 2025-11-10 22:01:10,984 | INFO | api_logger | /predict request processed in 1.1725s
+2025-11-10 22:20:21,146 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:20:31,057 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:22:39,901 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:22:51,146 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:23:47,307 | INFO | api_logger | /predict request processed in 1.3905s
+2025-11-10 22:27:24,942 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:27:37,151 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:29:22,949 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:29:34,006 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:30:00,219 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:30:10,991 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:39:12,003 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:39:23,464 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:39:51,151 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:40:03,810 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:40:22,424 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:40:30,955 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:40:51,581 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:41:01,721 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:41:30,503 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:41:38,691 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:42:18,780 | INFO | api_logger | /predict request processed in 0.9592s
+2025-11-10 22:42:39,069 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:42:48,974 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:42:50,617 | INFO | api_logger | /predict request processed in 1.6131s
+2025-11-10 22:42:50,618 | INFO | api_logger | /predict request processed in 1.6099s
+2025-11-10 22:50:08,838 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:50:17,911 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:50:43,691 | INFO | api_logger | /predict request processed in 1.0071s
+2025-11-10 22:50:44,703 | INFO | api_logger | /predict request processed in 0.8079s
+2025-11-10 22:50:45,549 | INFO | api_logger | /predict request processed in 0.8198s
+2025-11-10 22:55:14,353 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:55:23,167 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:55:39,508 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:55:50,330 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:56:14,463 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:56:24,885 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 22:58:54,470 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 22:59:04,847 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 23:07:36,439 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 23:07:45,743 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 23:08:13,412 | INFO | api_logger | /predict request processed in 0.8603s
+2025-11-10 23:08:14,403 | INFO | api_logger | /predict request processed in 0.8067s
+2025-11-10 23:08:15,284 | INFO | api_logger | /predict request processed in 0.8706s
+2025-11-10 23:17:25,808 | INFO | api_logger | /predict request processed in 0.9721s
+2025-11-10 23:17:26,789 | INFO | api_logger | /predict request processed in 0.8117s
+2025-11-10 23:17:27,570 | INFO | api_logger | /predict request processed in 0.7661s
+2025-11-10 23:27:18,878 | INFO | api_logger | Tokenizer loaded and special tokens added
+2025-11-10 23:27:29,557 | INFO | api_logger | Loaded model from model/best_cafebase_nli.pt successfully
+2025-11-10 23:27:30,808 | INFO | api_logger | /predict request processed in 1.0680s
+2025-11-10 23:27:32,056 | INFO | api_logger | /predict request processed in 0.8346s
+2025-11-10 23:27:32,869 | INFO | api_logger | /predict request processed in 0.7902s

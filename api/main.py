@@ -25,15 +25,10 @@ try:
     tokenizer.add_special_tokens({"additional_special_tokens": SPECIAL_TOKENS})
     logger.info("Tokenizer loaded and special tokens added")
 
-    # Tạo model
     ckpt = torch.load(MODEL_PATH, map_location="cpu")
     num_labels = len(ckpt["label2id"])
     model = CafeBERTNLIClassifier(num_labels=num_labels)
-
-    # Resize embeddings theo tokenizer
     model.base.resize_token_embeddings(len(tokenizer))
-
-    # Load state_dict
     model.load_state_dict(ckpt["state_dict"])
     model.eval()
     logger.info(f"Loaded model from {MODEL_PATH} successfully")
@@ -42,10 +37,10 @@ except Exception as e:
     logger.error(f"Failed to load model: {e}")
     model = None
 
-# Pydantic request/response
 class PredictRequest(BaseModel):
-    text1: str
-    text2: str
+    context: str
+    prompt: str
+    response: str
 
 class PredictResponse(BaseModel):
     label: str
@@ -66,21 +61,22 @@ def predict(req: PredictRequest):
     REQUEST_COUNT.labels(endpoint="/predict").inc()
 
     try:
-        # Tokenize inputs
+        combined_text = (
+            f"<CONTEXT> {req.context} </CONTEXT> "
+            f"<PROMPT> {req.prompt} </PROMPT> "
+            f"<RESPONSE> {req.response} </RESPONSE>"
+        )
+
         encoded = tokenizer(
-            req.text1,
-            req.text2,
+            combined_text,
             truncation=True,
             padding="max_length",
             max_length=512,
             return_tensors="pt"
         )
 
-        input_ids = encoded["input_ids"]
-        attention_mask = encoded["attention_mask"]
-
         with torch.no_grad():
-            logits = model(input_ids, attention_mask)
+            logits = model(encoded["input_ids"], encoded["attention_mask"])
             scores = torch.softmax(logits, dim=1)
             score, pred_id = torch.max(scores, dim=1)
             label = list(ckpt["label2id"].keys())[pred_id.item()]

@@ -1,3 +1,4 @@
 model/
 result/
 .env
+__pycache__/
