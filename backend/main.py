@@ -1,10 +1,21 @@
 from fastapi import FastAPI
-from backend.routers.predict import router as predict_router
+from fastapi.middleware.cors import CORSMiddleware
+from routers.predict import router as predict_router
 
-app = FastAPI(
-    title="LLM Hallucination Detection",
-    version="1.0.0"
+
+app = FastAPI(title="Vietnamese Hallucination Detection API", version="1.0")
+
+# Cấu hình CORS (Cho phép frontend gọi vào)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# include routes
-app.include_router(predict_router, prefix="/api")
+app.include_router(predict_router, prefix="/api", tags=["Hallucination"])
+
+@app.get("/")
+def read_root():
+    return {"message": "Hallucination Detection API is running"}
