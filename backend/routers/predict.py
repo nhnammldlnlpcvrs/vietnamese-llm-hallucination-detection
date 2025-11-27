@@ -1,16 +1,30 @@
-from fastapi import APIRouter
-from backend.schemas.hallu_input import HalluInput
-from backend.schemas.hallu_output import HalluOutput
-from backend.model.inference_model import hallu_model
-from backend.utils.preprocessing import clean_text
+from fastapi import APIRouter, HTTPException
+from schemas.hallu_input import HalluInput
+from schemas.hallu_output import HalluOutput
+from model.inference_model import hallu_model
 
 router = APIRouter()
 
 @router.post("/predict", response_model=HalluOutput)
-def predict(data: HalluInput):
-    context = clean_text(data.context)
-    prompt = clean_text(data.prompt)
-    response = clean_text(data.response)
-
-    output = hallu_model.predict(context, prompt, response)
-    return HalluOutput(**output)
+async def predict_hallu(data: HalluInput):
+    """
+    Endpoint nhận Context, Prompt, Response và trả về nhãn Hallucination.
+    """
+    try:
+        result = hallu_model.predict(
+            context=data.context,
+            prompt=data.prompt,
+            response=data.response
+        )
+        
+        # Map kết quả từ dict sang Pydantic Schema
+        return HalluOutput(
+            label=result["label"],
+            confidence=result["confidence"]
+        )
+        
+    except Exception as e:
+        # Log lỗi ra terminal để debug
+        print(f"Error during prediction: {e}")
+        # Trả về lỗi 500 cho client
+        raise HTTPException(status_code=500, detail=str(e))
