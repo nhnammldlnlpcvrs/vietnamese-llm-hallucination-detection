@@ -1,97 +1,63 @@
-<!-- src/lib/components/HalluForm.svelte -->
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
-  export let isLoading = false;
-  export let error: string | null = null;
+    import { createEventDispatcher } from 'svelte';
+    import { slide } from 'svelte/transition';
 
-  const dispatch = createEventDispatcher();
+    export let isLoading = false;
+    export let error: string | null = null;
 
-  let context = "";
-  let prompt = "";
-  let responseText = "";
+    let context = "";
+    let prompt = "";
+    let response = "";
 
-  function submit(e?: Event) {
-    e?.preventDefault();
-    if (!context.trim() || !prompt.trim() || !responseText.trim()) {
-      dispatch("error", { message: "Vui lòng điền đủ Context, Prompt và Response." });
-      return;
-    }
-    dispatch("submit", { context: context.trim(), prompt: prompt.trim(), response: responseText.trim() });
-  }
+    const dispatch = createEventDispatcher();
+    const handleSubmit = () => dispatch('submit', { context, prompt, response });
 
-  function clearAll() {
-    context = "";
-    prompt = "";
-    responseText = "";
-    dispatch("clear");
-  }
+    // Action tự động co giãn chiều cao
+    const autoResize = (node: HTMLTextAreaElement) => {
+        const resize = () => {
+            node.style.height = 'auto';
+            node.style.height = `${node.scrollHeight}px`;
+        };
+        node.addEventListener('input', resize);
+        return { destroy() { node.removeEventListener('input', resize); } };
+    };
 </script>
 
-<form class="card" on:submit|preventDefault={submit} aria-labelledby="halluform-title">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem">
-    <div>
-      <h3 id="halluform-title" style="margin:0">Dữ liệu đầu vào</h3>
-      <div class="muted small">Paste context / prompt / response để phân tích</div>
+<div class="glass-panel">
+    <div class="header"><h2>Dữ liệu đầu vào</h2></div>
+
+    <div class="field">
+        <label for="c">Context (Ngữ cảnh gốc)</label>
+        <textarea id="c" bind:value={context} use:autoResize rows="1" placeholder="Dán văn bản gốc..."></textarea>
     </div>
-    <div class="badge">Input</div>
-  </div>
+    <div class="field">
+        <label for="p">Prompt (Câu hỏi)</label>
+        <textarea id="p" bind:value={prompt} use:autoResize rows="1" placeholder="Người dùng đã hỏi gì?"></textarea>
+    </div>
+    <div class="field">
+        <label for="r">Response (Câu trả lời AI)</label>
+        <textarea id="r" bind:value={response} use:autoResize rows="1" placeholder="Câu trả lời cần kiểm chứng..."></textarea>
+    </div>
 
-  <label for="context" class="small">Context (Ngữ cảnh)</label>
-  <textarea id="context" bind:value={context} rows="6" placeholder="Dán đoạn văn bản gốc hoặc tài liệu tham khảo..." />
-
-  <label for="prompt" class="small">Prompt (Câu hỏi)</label>
-  <input id="prompt" type="text" bind:value={prompt} placeholder="Người dùng đã hỏi gì?" />
-
-  <label for="response" class="small">Response (Câu trả lời LLM)</label>
-  <textarea id="response" bind:value={responseText} rows="4" placeholder="Câu trả lời AI cần kiểm chứng..." />
-
-  {#if error}
-    <div style="margin-top:0.6rem;color:#fecaca;background: rgba(255,0,0,0.04);padding:0.5rem;border-radius:8px">{error}</div>
-  {/if}
-
-  <div style="display:flex;justify-content:flex-end;gap:0.6rem;margin-top:0.8rem">
-    <button type="button" class="ghost-btn" on:click={clearAll} disabled={isLoading}>Xóa</button>
-    <button type="submit" class="primary-btn" disabled={isLoading}>
-      {#if isLoading}
-        <span class="dot-loader" aria-hidden="true"></span> Đang phân tích...
-      {:else}
-        Kiểm tra ngay
-      {/if}
+    <button on:click={handleSubmit} disabled={isLoading || !context || !prompt || !response}>
+        {#if isLoading}<div class="loader"></div> Đang phân tích...{:else}Kiểm tra ngay{/if}
     </button>
-  </div>
-</form>
+
+    {#if error}<div class="error" transition:slide>{error}</div>{/if}
+</div>
 
 <style>
-  textarea, input {
-    width:100%;
-    padding:0.75rem;
-    border-radius:10px;
-    border:1px solid rgba(255,255,255,0.04);
-    background: rgba(15,23,42,0.55);
-    color:var(--text);
-    font-size:0.95rem;
-    margin-top:0.3rem;
-  }
-  .primary-btn {
-    padding:0.65rem 1rem;
-    border-radius:10px;
-    border:none;
-    background: linear-gradient(90deg,var(--accent1),var(--accent2));
-    color:white;
-    font-weight:700;
-  }
-  .ghost-btn {
-    padding:0.55rem 0.9rem;
-    border-radius:10px;
-    background:transparent;
-    border:1px solid rgba(255,255,255,0.04);
-    color:var(--muted);
-    font-weight:700;
-  }
-  .primary-btn:disabled, .ghost-btn:disabled { opacity:0.6; cursor:not-allowed; }
-  .dot-loader {
-    width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:8px;
-    border:2px solid rgba(255,255,255,0.12);border-top-color:white;animation:spin .7s linear infinite;
-  }
-  @keyframes spin{ to{ transform:rotate(360deg);} }
+    .glass-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); backdrop-filter: blur(16px); border-radius: 24px; padding: 2rem; height: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+    .header { border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem; padding-bottom: 1rem; }
+    h2 { margin: 0; font-size: 1.25rem; color: white; }
+    .field { margin-bottom: 1.5rem; }
+    label { display: block; margin-bottom: 0.5rem; color: #cbd5e1; font-size: 0.9rem; font-weight: 500; }
+    textarea { width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; border-radius: 12px; padding: 1rem; color: white; font-size: 1rem; font-family: inherit; transition: all 0.2s; resize: none; overflow: hidden; min-height: 3.5rem; }
+    textarea:focus { outline: none; border-color: #818cf8; background: rgba(15, 23, 42, 0.9); box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2); }
+    button { width: 100%; padding: 1rem; background: linear-gradient(135deg, #4f46e5, #9333ea); border: none; border-radius: 12px; color: white; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; display: flex; justify-content: center; align-items: center; gap: 0.5rem; }
+    button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(79, 70, 229, 0.4); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error { margin-top: 1rem; color: #fca5a5; background: rgba(239, 68, 68, 0.2); padding: 1rem; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.5); }
+    .loader { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: white; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 </style>

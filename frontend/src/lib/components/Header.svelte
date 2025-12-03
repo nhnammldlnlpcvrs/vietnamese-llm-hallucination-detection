@@ -1,19 +1,30 @@
-<!-- src/lib/components/Header.svelte -->
-<script lang="ts">
-  import { fly } from "svelte/transition";
+<script>
+    import { fly } from 'svelte/transition';
 </script>
 
-<header class="card" in:fly={{ y: -10, duration: 400 }} style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-  <div style="display:flex;gap:0.75rem;align-items:center">
-    <div style="font-size:1.6rem">✨</div>
-    <div>
-      <div style="font-weight:800;font-size:1.15rem">Hallu<strong style="background:linear-gradient(90deg,var(--accent1),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Detector</strong></div>
-      <div class="muted small">Hệ thống phát hiện ảo giác LLM — Hybrid Guardrails</div>
+<header in:fly={{ y: -20, duration: 800 }}>
+    <div class="logo">
+        <span class="icon">✨</span>
+        <h1>Hallu<span class="highlight">Detector</span></h1>
     </div>
-  </div>
-
-  <nav style="display:flex;gap:0.5rem;align-items:center">
-    <a class="badge" href="https://github.com/" target="_blank" rel="noopener noreferrer">Docs</a>
-    <button class="badge" on:click={() => alert('Tùy chọn')}>Tùy chọn</button>
-  </nav>
+    <p>Hệ thống phát hiện ảo giác LLM Tiếng Việt (Hybrid Guardrails)</p>
 </header>
+
+<style>
+    header { text-align: center; margin-bottom: 3rem; padding-top: 2rem; }
+    .logo { display: flex; justify-content: center; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+    .icon { font-size: 2.5rem; animation: pulse 3s infinite; }
+    h1 { 
+        font-size: 3rem; font-weight: 800; margin: 0; 
+        background: linear-gradient(to right, #fff, #94a3b8);
+        background-clip: text; -webkit-background-clip: text; 
+        -webkit-text-fill-color: transparent; color: transparent;
+    }
+    .highlight { 
+        background: linear-gradient(135deg, #6366f1, #a855f7);
+        background-clip: text; -webkit-background-clip: text; 
+        -webkit-text-fill-color: transparent; color: transparent;
+    }
+    p { color: #94a3b8; font-size: 1.1rem; margin: 0; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+</style>
