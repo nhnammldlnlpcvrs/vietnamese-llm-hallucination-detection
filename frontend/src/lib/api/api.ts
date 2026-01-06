@@ -13,20 +13,12 @@ export interface HalluOutput {
 const API_URL = "http://localhost:8000/api/predict";
 
 export const detectHallucination = async (data: HalluInput): Promise<HalluOutput> => {
-    try {
-        console.log("Đang gọi API:", API_URL); // Log để check
-        const res = await fetch(API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-        });
+    const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+    });
 
-        if (!res.ok) {
-            throw new Error(`Lỗi ${res.status}: ${res.statusText}`);
-        }
-        return await res.json();
-    } catch (error) {
-        console.error("API Error:", error);
-        throw error;
-    }
+    if (!res.ok) throw new Error(`Lỗi hệ thống (${res.status})`);
+    return await res.json();
 };

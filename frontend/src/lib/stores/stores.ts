@@ -1,16 +1,21 @@
 // frontend/src/lib/stores/stores.ts
 import { writable } from "svelte/store";
+import type { HalluInput, HalluOutput } from "$lib/api/api";
 
-export interface HallucinationResult {
-    type: "intrinsic" | "extrinsic" | "none";
-    confidence: number;
-    timestamp: string;
+export interface HistoryItem extends HalluInput {
+    id: string;
+    result: HalluOutput;
+    timestamp: Date;
 }
 
-export const latestResult = writable<HallucinationResult | null>(null);
-export const history = writable<HallucinationResult[]>([]);
-export const metrics = writable({
-    dataDrift: [],
-    modelConfidence: [],
-    requestTimeline: []
-});
+export const history = writable<HistoryItem[]>([]);
+export const currentResult = writable<HalluOutput | null>(null);
+
+export function addToHistory(input: HalluInput, result: HalluOutput) {
+    history.update(h => [{
+        ...input,
+        id: crypto.randomUUID(),
+        result,
+        timestamp: new Date()
+    }, ...h].slice(0, 50));
+}
