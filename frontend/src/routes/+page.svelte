@@ -1,3 +1,4 @@
+<!---frontend/src/routes/+page.svelte--->
 <script lang="ts">
     import Header from '$lib/components/Header.svelte';
     import HalluForm from '$lib/components/HalluForm.svelte';

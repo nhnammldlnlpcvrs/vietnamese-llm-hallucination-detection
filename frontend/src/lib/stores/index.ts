@@ -1,4 +1,4 @@
-// src/stores/index.ts
+// frontend/src/lib/stores/index.ts
 import { writable } from "svelte/store";
 
 export type HallucinationResult = {

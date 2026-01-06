@@ -1,3 +1,4 @@
+<!---frontend/src/lib/components/HalluResult.svelte--->
 <script lang="ts">
     import type { HalluOutput } from '$lib/api/api';
     import { fly, slide } from 'svelte/transition';

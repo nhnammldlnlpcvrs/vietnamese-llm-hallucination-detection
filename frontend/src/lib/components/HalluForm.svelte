@@ -1,3 +1,4 @@
+<!---frontend/src/lib/components/HalluForm.svelte--->
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
     import { slide } from 'svelte/transition';

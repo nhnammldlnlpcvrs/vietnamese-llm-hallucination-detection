@@ -1,3 +1,4 @@
+<!---frontend/src/lib/components/Header.svelte--->
 <script>
     import { fly } from 'svelte/transition';
 </script>

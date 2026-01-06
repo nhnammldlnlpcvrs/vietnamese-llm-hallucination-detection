@@ -1,3 +1,4 @@
+// frontend/src/lib/api/api.ts
 export interface HalluInput {
     context: string;
     prompt: string;

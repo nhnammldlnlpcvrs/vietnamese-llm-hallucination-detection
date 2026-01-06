@@ -1,3 +1,4 @@
+// frontend/src/lib/stores/stores.ts
 import { writable } from "svelte/store";
 
 export interface HallucinationResult {
