@@ -15,7 +15,6 @@ app.add_middleware(
 
 app.include_router(predict_router, prefix="/api", tags=["Hallucination"])
 
-# Debug Routes
 print("\nAPI ROUTES:")
 for route in app.routes:
     if hasattr(route, "path"):
