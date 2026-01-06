@@ -1,42 +1,81 @@
 <!---frontend/src/lib/components/HalluResult.svelte--->
 <script lang="ts">
     import type { HalluOutput } from '$lib/api/api';
-    import { fly, slide } from 'svelte/transition';
+    import { ShieldCheck, Ban, AlertOctagon, RotateCcw } from 'lucide-svelte';
+    import { fly } from 'svelte/transition';
+    import { createEventDispatcher } from 'svelte';
 
     export let result: HalluOutput;
+    const dispatch = createEventDispatcher();
 
-    const getTheme = (label: string) => {
-        const l = label.toLowerCase();
-        if (l.includes("no")) return { color: "#34d399", bg: "rgba(52, 211, 153, 0.1)", icon: "✅", title: "Chính xác", desc: "Thông tin hoàn toàn khớp với ngữ cảnh." };
-        if (l.includes("intrinsic")) return { color: "#f43f5e", bg: "rgba(244, 63, 94, 0.1)", icon: "🚫", title: "Mâu thuẫn (Intrinsic)", desc: "Thông tin sai lệch/ngược lại với ngữ cảnh gốc." };
-        return { color: "#fbbf24", bg: "rgba(251, 191, 36, 0.1)", icon: "⚠️", title: "Bịa đặt (Extrinsic)", desc: "Thông tin không có trong ngữ cảnh (có thể đúng ngoài đời)." };
-    };
+    $: theme = (() => {
+        const l = result.label?.toLowerCase() || '';
 
-    $: theme = getTheme(result.label);
+        if (l.includes('no') || l.includes('entailment')) {
+            return { 
+                color: 'text-emerald-400', 
+                border: 'border-emerald-500', 
+                bg: 'from-emerald-950/40', 
+                icon: ShieldCheck, 
+                title: 'CHÍNH XÁC',
+                desc: 'Thông tin hoàn toàn khớp với ngữ cảnh.'
+            };
+        }
+        
+        if (l.includes('intrinsic') || l.includes('contradiction')) {
+            return { 
+                color: 'text-rose-500', 
+                border: 'border-rose-500', 
+                bg: 'from-rose-950/40', 
+                icon: Ban, 
+                title: 'MÂU THUẪN',
+                desc: 'Thông tin sai lệch so với dữ liệu gốc.'
+            };
+        }
+
+        return { 
+            color: 'text-amber-400', 
+            border: 'border-amber-500', 
+            bg: 'from-amber-950/40', 
+            icon: AlertOctagon, 
+            title: 'BỊA ĐẶT',
+            desc: 'Thông tin không tồn tại trong ngữ cảnh.'
+        };
+    })();
 </script>
 
-<div class="glass-panel" style="background: {theme.bg}; border-color: {theme.color}" in:fly={{ y: 20 }}>
-    <div class="icon-wrapper">{theme.icon}</div>
-    <h3 style="color: {theme.color}">{theme.title}</h3>
-    <p class="desc">{theme.desc}</p>
-    
-    <div class="divider"></div>
+<div in:fly={{ y: 20, duration: 500 }} class="relative z-20 w-full">
+    <div class="relative rounded-2xl border {theme.border} bg-gradient-to-br {theme.bg} to-slate-950/80 backdrop-blur-xl p-6 shadow-2xl overflow-hidden">
+        
+        <div class="flex items-start justify-between gap-6">
+            <div class="flex items-center gap-4">
+                <div class="relative p-3 rounded-xl bg-white/5 border border-white/10 shadow-inner">
+                    <svelte:component this={theme.icon} size={32} class={theme.color} />
+                </div>
+                <div>
+                    <h3 class="text-2xl font-black tracking-wide text-white">{theme.title}</h3>
+                    <p class="text-xs text-slate-400">{theme.desc}</p>
+                </div>
+            </div>
 
-    <div class="bar-container">
-        <div class="label"><span>Độ tin cậy</span><span style="color: {theme.color}">{(result.confidence * 100).toFixed(1)}%</span></div>
-        <div class="track"><div class="fill" style="width: {result.confidence * 100}%; background: {theme.color}" in:slide={{ axis: 'x', duration: 1000 }}></div></div>
+            <div class="text-right">
+                <div class="text-3xl font-bold {theme.color}">{(result.confidence * 100).toFixed(0)}%</div>
+                <div class="text-[10px] text-slate-500 font-bold uppercase">Độ tin cậy</div>
+            </div>
+        </div>
+
+        <div class="mt-6 h-1.5 w-full bg-slate-900 rounded-full overflow-hidden">
+            <div class="h-full {theme.color.replace('text', 'bg')} shadow-[0_0_10px_currentColor] transition-all duration-1000" style="width: {result.confidence * 100}%"></div>
+        </div>
+
+        <div class="mt-6 flex justify-end pt-4 border-t border-white/5">
+            <button 
+                on:click={() => dispatch('reset')}
+                class="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold transition-all border border-slate-700 hover:border-indigo-500"
+            >
+                <RotateCcw size={16} />
+                Test Case Tiếp Theo
+            </button>
+        </div>
     </div>
 </div>
-
-<style>
-    .glass-panel { backdrop-filter: blur(16px); border-radius: 24px; padding: 2rem; height: 100%; border: 1px solid; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
-    .icon-wrapper { font-size: 4rem; margin-bottom: 1rem; animation: tada 1s ease-in-out; }
-    h3 { font-size: 2rem; margin: 0 0 0.5rem 0; font-weight: 700; }
-    .desc { color: #cbd5e1; margin-bottom: 0; }
-    .divider { height: 1px; background: rgba(255,255,255,0.1); margin: 2rem 0; }
-    .bar-container { text-align: left; background: rgba(0,0,0,0.2); padding: 1.5rem; border-radius: 16px; }
-    .label { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.9rem; }
-    .track { height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden; }
-    .fill { height: 100%; border-radius: 5px; transition: width 1s ease-out; }
-    @keyframes tada { 0% { transform: scale(1); } 10%, 20% { transform: scale(0.9) rotate(-3deg); } 30%, 50%, 70%, 90% { transform: scale(1.1) rotate(3deg); } 40%, 60%, 80% { transform: scale(1.1) rotate(-3deg); } 100% { transform: scale(1) rotate(0); } }
-</style>
