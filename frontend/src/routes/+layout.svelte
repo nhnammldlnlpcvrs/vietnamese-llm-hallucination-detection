@@ -1,19 +1,16 @@
 <!---frontend/src/routes/+layout.svelte--->
 <script>
     import '../app.css';
-</script>
+</script>clear
 
-<div class="app-bg">
-    <div class="orb o1"></div>
-    <div class="orb o2"></div>
-    <div class="overlay"><slot /></div>
+
+<div class="relative min-h-screen overflow-x-hidden">
+    <div class="fixed top-0 left-0 w-full h-full -z-10 pointer-events-none overflow-hidden">
+        <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/10 blur-[120px] rounded-full"></div>
+        <div class="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-purple-600/10 blur-[120px] rounded-full"></div>
+        <div class="absolute inset-0 opacity-[0.03]" 
+             style="background-image: radial-gradient(#fff 1px, transparent 0); background-size: 40px 40px;"></div>
+    </div>
+    
+    <slot />
 </div>
-
-<style>
-    .app-bg { position: relative; min-height: 100vh; background: #0f172a; overflow: hidden; }
-    .orb { position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.4; z-index: 0; animation: float 20s infinite alternate; }
-    .o1 { width: 500px; height: 500px; background: #4f46e5; top: -100px; left: -100px; }
-    .o2 { width: 600px; height: 600px; background: #db2777; bottom: -100px; right: -100px; animation-delay: -5s; }
-    .overlay { position: relative; z-index: 10; min-height: 100vh; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 50px 50px; }
-    @keyframes float { from { transform: translate(0,0); } to { transform: translate(30px, 30px); } }
-</style>
