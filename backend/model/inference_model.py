@@ -1,3 +1,4 @@
+# backend/model/inference_model.py
 import os
 import torch
 import numpy as np
