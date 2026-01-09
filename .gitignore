@@ -2,3 +2,4 @@ models/
 result/
 .env
 __pycache__/
+data/vihallu-dataset/*.csv
