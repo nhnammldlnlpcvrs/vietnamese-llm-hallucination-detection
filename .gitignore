@@ -2,4 +2,11 @@ models/
 result/
 .env
 __pycache__/
-data/vihallu-dataset/*.csv
+
+# ignore raw data files
+data/**/*.csv
+data/**/*.json
+data/**/*.parquet
+
+# BUT keep DVC metadata
+!data/**/*.dvc
