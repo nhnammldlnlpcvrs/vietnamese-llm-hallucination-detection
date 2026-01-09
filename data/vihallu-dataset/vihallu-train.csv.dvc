@@ -1,0 +1,5 @@
+outs:
+- md5: ade7a7128908af0dc9c5b5f3737d26c9
+  size: 10728910
+  hash: md5
+  path: vihallu-train.csv
