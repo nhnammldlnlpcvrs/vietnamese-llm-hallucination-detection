@@ -1,7 +1,17 @@
+# Ignore Python bytecode files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Ignore virtual environment directories
+venv/
+env/
+.env
+
+# Ignore Model and result directories 
 models/
 result/
-.env
-__pycache__/
 
 # ignore raw data files
 data/**/*.csv
