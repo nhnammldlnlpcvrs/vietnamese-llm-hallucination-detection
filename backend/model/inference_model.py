@@ -180,6 +180,14 @@ class HallucinationPipeline:
             probs = F.softmax(torch.tensor([score_0, score_1, score_2]), dim=0).numpy()
             
             return np.array([[probs[0], probs[2], probs[1]]])
+        
+    def _normalize_label(self, label: str) -> str:
+        label = label.lower()
+        if "intrinsic" in label:
+            return "intrinsic"
+        if "extrinsic" in label:
+            return "extrinsic"
+        return "no"
 
     def predict(self, context, prompt, response):
         print("\n--- PROCESSING REQUEST (GUARDRAIL V3: EXTRINSIC HUNTER) ---")
@@ -217,28 +225,46 @@ class HallucinationPipeline:
 
         if p_contra > 0.5:
             print("GUARDRAIL: NLI Contradiction cao -> Force Intrinsic")
-            return {"label": "Intrinsic Hallucination", "confidence": float(p_contra)}
+            return {
+                "label": self._normalize_label("Intrinsic Hallucination"),
+                "confidence": float(p_contra)
+            }
+
 
         if p_neutral > 0.45 and p_entail < 0.5:
             print("GUARDRAIL: NLI Neutral cao (Thong tin ngoai le) -> Force Extrinsic")
-            return {"label": "Extrinsic Hallucination", "confidence": float(p_neutral)}
+            return {
+                "label": self._normalize_label("Extrinsic Hallucination"),
+                "confidence": float(p_neutral)
+            }
+
 
         if new_entity_count >= 1 and class_id == 1:
             if p_entail < 0.9:
                 print("GUARDRAIL: Có thuc the la va Entailment khong tuyet doi -> Force Extrinsic")
-                return {"label": "Extrinsic Hallucination", "confidence": 0.85}
+                return {
+                    "label": "extrinsic",
+                    "confidence": 0.85
+                }
 
         if f_vistral[0][0] > 0.6:
              print("GUARDRAIL: Vistral vote Extrinsic rat cao -> Force Extrinsic")
-             return {"label": "Extrinsic Hallucination", "confidence": float(f_vistral[0][0])}
+             return {
+                "label": "extrinsic",
+                "confidence": float(f_vistral[0][0])
+            }
 
         if p_contra > 0.35 and class_id == 1:
              print("Soft Warning: Co tin hieu mau thuan nhe. Tra ve Intrinsic.")
-             return {"label": "Intrinsic Hallucination", "confidence": float(p_contra)}
+             return {
+                "label": "intrinsic",
+                "confidence": float(p_contra)
+            }
 
         return {
-            "label": original_label,
+            "label": self._normalize_label(original_label),
             "confidence": float(confidence)
         }
+    
 
 hallu_model = HallucinationPipeline()
