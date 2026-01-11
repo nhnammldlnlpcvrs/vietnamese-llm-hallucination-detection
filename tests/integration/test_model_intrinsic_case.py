@@ -1,3 +1,4 @@
+# tests/integration/test_model_intrinsic_case.py
 def test_intrinsic_hallucination_detected(predict_fn):
     """
     Intrinsic hallucination:

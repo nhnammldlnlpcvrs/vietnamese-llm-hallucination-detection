@@ -1,3 +1,4 @@
+# tests/integration/test_model_extrinsic_case.py
 def test_extrinsic_hallucination_detected(predict_fn):
     """
     Extrinsic hallucination:

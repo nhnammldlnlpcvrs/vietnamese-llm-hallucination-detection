@@ -1,3 +1,4 @@
+# tests/integration/test_model_inference_basic.py
 import pytest
 
 @pytest.mark.integration
@@ -13,10 +14,7 @@ def test_model_basic_inference(model):
     assert "label" in result
     assert "confidence" in result
 
-    assert result["label"] in {
-        "No Hallucination",
-        "Extrinsic Hallucination",
-        "Intrinsic Hallucination"
-    }
+    assert result["label"] in {"no", "intrinsic", "extrinsic"}
+
 
     assert 0.0 <= result["confidence"] <= 1.0

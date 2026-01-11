@@ -1,3 +1,4 @@
+# tests/integration/test_model_confidence.py
 import pytest
 
 
@@ -10,7 +11,7 @@ def test_confidence_no_hallu_high(model):
         response="Trái Đất quay quanh Mặt Trời."
     )
 
-    assert result["label"] == "No Hallucination"
+    assert result["label"] == "no"
     assert result["confidence"] > 0.5
 
 
@@ -23,5 +24,5 @@ def test_confidence_intrinsic_non_trivial(model):
         response="Mặt Trời mọc ở hướng Tây."
     )
 
-    assert result["label"] == "Intrinsic Hallucination"
+    assert result["label"] == "intrinsic"
     assert result["confidence"] > 0.3

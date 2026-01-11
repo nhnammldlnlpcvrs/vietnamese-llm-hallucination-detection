@@ -1,3 +1,4 @@
+# tests/integration/test_model_no_hallucination_case.py
 def test_no_hallucination_detected(predict_fn):
     """
     No hallucination:
