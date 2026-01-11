@@ -9,12 +9,25 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
 
-@pytest.fixture(scope="session")
-def client():
+@pytest.fixture
+def client(monkeypatch):
     """
-    FastAPI TestClient.
-    Does NOT load real model.
+    FastAPI TestClient with mocked model.
+    Model MUST be mocked before app import.
     """
+    fake_model = MagicMock()
+    fake_model.predict.return_value = {
+        "label": "no",
+        "confidence": 0.99,
+        "type": "none"
+    }
+
+    monkeypatch.setattr(
+        "backend.routers.predict.hallu_model",
+        fake_model,
+        raising=False
+    )
+
     from backend.main import app
     return TestClient(app)
 
@@ -22,16 +35,17 @@ def client():
 @pytest.fixture
 def mock_model(monkeypatch):
     """
-    Mock hallucination model to avoid loading ML models.
+    Mock hallucination model (unit tests only).
     """
     fake_model = MagicMock()
     fake_model.predict.return_value = {
-        "label": "No Hallucination",
-        "confidence": 0.99
+        "label": "no",
+        "confidence": 0.99,
+        "type": "none"
     }
 
     monkeypatch.setattr(
-        "routers.predict.hallu_model",
+        "backend.routers.predict.hallu_model",
         fake_model
     )
 
@@ -39,10 +53,45 @@ def mock_model(monkeypatch):
 
 
 @pytest.fixture(scope="session")
-def model():
+def real_model():
     """
-    Load full hallucination pipeline.
-    Integration tests ONLY.
+    Load REAL hallucination model.
+    VERY SLOW – integration tests only.
     """
     from backend.model.inference_model import hallu_model
     return hallu_model
+
+
+# Alias cho test integration (đúng tên test đang dùng)
+@pytest.fixture(scope="session")
+def model(real_model):
+    """
+    Alias for integration tests.
+    """
+    return real_model
+
+
+@pytest.fixture(scope="session")
+def predict_fn(model):
+    """
+    Direct model inference (no API).
+    Used in model-level integration tests.
+    """
+
+    def _predict(*, context, prompt=None, response):
+        return model.predict(
+            context=context,
+            prompt=prompt,
+            response=response
+        )
+
+    return _predict
+
+
+@pytest.fixture
+def valid_payload():
+    return {
+        "context": "Paris is the capital of France.",
+        "prompt": "What is the capital of France?",
+        "response": "Paris"
+    }
