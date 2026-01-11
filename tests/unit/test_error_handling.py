@@ -1,3 +1,4 @@
+# tests/unit/test_error_handling.py
 def test_model_crash(client, monkeypatch):
     from backend.routers import predict
 

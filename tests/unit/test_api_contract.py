@@ -1,8 +1,12 @@
+# tests/unit/test_api_contract.py
 def test_predict_success(client, valid_payload):
-    r = client.post("/api/predict", json=valid_payload)
-    assert r.status_code == 200
+    res = client.post("/api/predict", json=valid_payload)
 
-    data = r.json()
+    assert res.status_code == 200
+
+    data = res.json()
     assert "label" in data
     assert "confidence" in data
-    assert isinstance(data["confidence"], float)
+
+    assert data["label"] == "no"
+    assert 0.0 <= data["confidence"] <= 1.0
