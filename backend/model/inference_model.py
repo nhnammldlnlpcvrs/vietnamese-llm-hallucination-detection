@@ -37,21 +37,27 @@ MODEL_PATH = os.getenv(
 
 DISABLE_MODEL = os.getenv("DISABLE_MODEL", "false").lower() == "true"
 
-if not DISABLE_MODEL:
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
-else:
-    tokenizer = None
-    model = None
-
 class HallucinationPipeline:
     def __init__(self):
-        print("Initializing Pipeline (Resource Optimized)...")
+        self.disabled = DISABLE_MODEL
+
+        self.labels = {
+            0: "Extrinsic Hallucination",
+            1: "No Hallucination",
+            2: "Intrinsic Hallucination"
+        }
+
+        if self.disabled:
+            print("HallucinationPipeline initialized in DISABLED mode")
+            return
+
+        print("Initializing HallucinationPipeline (Production mode)")
 
         hf_token = os.getenv("HF_TOKEN")
         if hf_token:
-            print("Found HF_TOKEN, logging in...")
             login(token=hf_token)
+
+        print("Initializing Pipeline (Resource Optimized)...")
         
         try:
             print(f"- Loading PhoBERT (CPU)...")
@@ -206,6 +212,12 @@ class HallucinationPipeline:
         return "no"
 
     def predict(self, context, prompt, response):
+        if self.disabled:
+            # CI / Unit test stub
+            return {
+                "label": "No Hallucination",
+                "confidence": 1.0
+            }
         print("\n--- PROCESSING REQUEST (GUARDRAIL V3: EXTRINSIC HUNTER) ---")
         c, p, r = str(context).strip(), str(prompt).strip(), str(response).strip()
         
@@ -217,9 +229,9 @@ class HallucinationPipeline:
         f_sim = cosine_similarity(c_emb, r_emb)
         
         f_nli = self._get_nli_features(c, r)
-        p_entail, p_neutral, p_contra = f_nli[0]
+        p_contra, p_neutral, p_entail = f_nli[0]
         
-        print(f"- [NLI Debug] Entail: {p_entail:.4f} | Neu (Ext): {p_neutral:.4f} | Contra (Int): {p_contra:.4f}")
+        print(f"- [NLI Debug] Contra (Int): {p_contra:.4f} | Neu (Ext): {p_neutral:.4f} | Entail (No): {p_entail:.4f}")
 
         f_ner = self._get_ner_features(c, r)
         new_entity_count = f_ner[0][0]
@@ -282,5 +294,10 @@ class HallucinationPipeline:
             "confidence": float(confidence)
         }
     
+_pipeline_instance = None
 
-hallu_model = HallucinationPipeline()
+def get_hallu_model() -> HallucinationPipeline:
+    global _pipeline_instance
+    if _pipeline_instance is None:
+        _pipeline_instance = HallucinationPipeline()
+    return _pipeline_instance
