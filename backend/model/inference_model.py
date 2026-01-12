@@ -18,6 +18,8 @@ from huggingface_hub import login
 
 load_dotenv()
 
+
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 PHOBERT_FINETUNED_PATH = os.path.join(BASE_DIR, "models/phobert_finetuned_model")
 LGBM_PATH = os.path.join(BASE_DIR, "models/lgbm_final_fold_0.txt")
@@ -27,6 +29,20 @@ NER_MODEL_NAME = "undertheseanlp/vietnamese-ner-v1.4.0a2"
 VISTRAL_MODEL_NAME = "Viet-Mistral/Vistral-7B-Chat"
 
 SMALL_MODEL_DEVICE = torch.device("cpu") 
+
+MODEL_PATH = os.getenv(
+    "MODEL_PATH",
+    "models/phobert_finetuned_model"
+)
+
+DISABLE_MODEL = os.getenv("DISABLE_MODEL", "false").lower() == "true"
+
+if not DISABLE_MODEL:
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+    model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
+else:
+    tokenizer = None
+    model = None
 
 class HallucinationPipeline:
     def __init__(self):
