@@ -139,11 +139,28 @@ class HallucinationPipeline:
     def _get_nli_features(self, context, response):
         premise = context if context else "no context"
         hypothesis = response if response else "no response"
-        inputs = self.nli_tokenizer(premise, hypothesis, padding=True, truncation=True, max_length=512, return_tensors="pt").to(SMALL_MODEL_DEVICE)
+
+        inputs = self.nli_tokenizer(
+            premise,
+            hypothesis,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors="pt"
+        ).to(SMALL_MODEL_DEVICE)
+
         with torch.no_grad():
             outputs = self.nli_model(**inputs)
-            probs = torch.softmax(outputs.logits, dim=-1).cpu().numpy()
-        return probs
+            probs = torch.softmax(outputs.logits, dim=-1).cpu().numpy()[0]
+
+        id2label = self.nli_model.config.id2label
+
+        p_entail = probs[[i for i, v in id2label.items() if "entail" in v.lower()][0]]
+        p_neutral = probs[[i for i, v in id2label.items() if "neutral" in v.lower()][0]]
+        p_contra = probs[[i for i, v in id2label.items() if "contradict" in v.lower()][0]]
+
+        return p_entail, p_neutral, p_contra
+
 
     def _get_vistral_probs(self, context, prompt, response):
         sys_msg = """Bạn là chuyên gia thẩm định độ trung thực của AI (Hallucination Judge).
@@ -228,8 +245,8 @@ class HallucinationPipeline:
         r_emb = self._extract_embeddings([r])
         f_sim = cosine_similarity(c_emb, r_emb)
         
-        f_nli = self._get_nli_features(c, r)
-        p_contra, p_neutral, p_entail = f_nli[0]
+        p_entail, p_neutral, p_contra = self._get_nli_features(c, r)
+        f_nli = np.array([[p_entail, p_neutral, p_contra]])
         
         print(f"- [NLI Debug] Contra (Int): {p_contra:.4f} | Neu (Ext): {p_neutral:.4f} | Entail (No): {p_entail:.4f}")
 
@@ -301,3 +318,5 @@ def get_hallu_model() -> HallucinationPipeline:
     if _pipeline_instance is None:
         _pipeline_instance = HallucinationPipeline()
     return _pipeline_instance
+
+hallu_model = get_hallu_model()
