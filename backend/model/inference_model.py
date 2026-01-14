@@ -38,6 +38,13 @@ MODEL_PATH = os.getenv(
 DISABLE_MODEL = os.getenv("DISABLE_MODEL", "false").lower() == "true"
 
 class HallucinationPipeline:
+
+    API_LABEL_MAP = {
+    "No Hallucination": "no",
+    "Intrinsic Hallucination": "intrinsic",
+    "Extrinsic Hallucination": "extrinsic",
+    }
+
     def __init__(self):
         self.disabled = DISABLE_MODEL
 
@@ -232,9 +239,10 @@ class HallucinationPipeline:
         if self.disabled:
             # CI / Unit test stub
             return {
-                "label": "No Hallucination",
+                "label": "no",
                 "confidence": 1.0
             }
+        
         print("\n--- PROCESSING REQUEST (GUARDRAIL V3: EXTRINSIC HUNTER) ---")
         c, p, r = str(context).strip(), str(prompt).strip(), str(response).strip()
         
