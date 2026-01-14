@@ -1,0 +1,32 @@
+FROM python:3.10-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-serving.txt .
+
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements-serving.txt
+
+COPY backend backend
+
+ENV MODEL_PATH=/models/phobert_finetuned_model
+ENV DISABLE_MODEL=false
+
+EXPOSE 8000
+
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", \
+     "backend.main:app", "--bind", "0.0.0.0:8000"]
