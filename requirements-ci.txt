@@ -12,3 +12,4 @@ opentelemetry-sdk>=1.26.0
 
 torch>=2.2.0
 numpy>=1.25.0
+lightgbm>=4.0.0
