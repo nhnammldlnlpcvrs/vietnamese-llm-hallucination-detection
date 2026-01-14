@@ -64,7 +64,11 @@ jobs:
         run: |
           IMAGE=nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection
 
-          docker build -t $IMAGE:${{ github.sha }} .
+          docker build \
+            -f backend/Dockerfile \
+            -t $IMAGE:${{ github.sha }} \
+            .
+
           docker tag $IMAGE:${{ github.sha }} $IMAGE:latest
 
           docker push $IMAGE:${{ github.sha }}
