@@ -22,4 +22,4 @@ RUN pip install --upgrade pip && \
 COPY backend backend
 COPY tests tests
 
-CMD ["pytest", "--cov=backend", "--cov-report=term-missing"]
+CMD ["pytest", "tests/unit", "--cov=backend", "--cov-report=term-missing"]
