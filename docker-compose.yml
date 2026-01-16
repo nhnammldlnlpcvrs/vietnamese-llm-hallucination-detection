@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  ci:
+    container_name: hallucination-ci
+    image: hallucination-ci
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ci
+    environment:
+      DISABLE_MODEL: "true"
+    volumes:
+      - .:/workspace
+    command: >
+      pytest tests/unit
+      --cov=backend
+      --cov-report=xml:/workspace/coverage.xml
+      --cov-report=term-missing
+
+  serving:
+    container_name: hallucination-serving
+    image: hallucination-serving
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.serving
+    environment:
+      DISABLE_MODEL: "false"
+      MODEL_PATH: /models/phobert_finetuned_model
+    ports:
+      - "8001:8000"
