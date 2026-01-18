@@ -2,6 +2,7 @@ pipeline {
     agent any
     
     environment {
+        KUBECONFIG = '/var/jenkins_home/.kube/config'
         DOCKER_IMAGE = 'nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection'
         K8S_NAMESPACE = 'hallucination-prod'
         HELM_RELEASE = 'hallucination-app'
