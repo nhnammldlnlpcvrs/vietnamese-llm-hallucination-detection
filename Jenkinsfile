@@ -34,7 +34,7 @@ pipeline {
         stage('Manual Approval') {
             steps {
                 script {
-                    input message: 'Image Built. Deploy to Local K8s?', ok: 'Deploy Now'
+                    input message: 'Docker Image Built. Deploy to Local K8s?', ok: 'Deploy Now'
                 }
             }
         }
@@ -50,6 +50,8 @@ pipeline {
                         --set image.tag=${env.BUILD_NUMBER} \
                         --set image.repository=${DOCKER_IMAGE} \
                         --set model.enabled=false \
+                        --set service.type=NodePort \
+                        --set service.nodePort=30005 \
                         --wait
                     """
                 }
