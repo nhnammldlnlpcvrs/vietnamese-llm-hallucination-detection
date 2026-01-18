@@ -7,19 +7,17 @@ ENV PYTHONPATH=/app
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 COPY requirements-ci.txt .
-
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements-ci.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements-ci.txt
 
 COPY backend backend
 COPY tests tests
+COPY .coveragerc .
 
 CMD ["pytest", "tests/unit", \
      "--cov=backend", \
+     "--cov-config=.coveragerc", \
      "--cov-report=xml:/workspace/coverage.xml", \
      "--cov-report=term-missing"]
