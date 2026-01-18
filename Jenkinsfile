@@ -19,10 +19,10 @@ pipeline {
         stage('Build & Push Docker') {
             steps {
                 script {
-                    echo "--- Building Docker Image ---"
+                    echo "Building Docker Image"
                     sh "docker build -f docker/Dockerfile.serving -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
                     
-                    echo "--- Pushing to Docker Hub ---"
+                    echo "Pushing to Docker Hub"
                     withDockerRegistry([credentialsId: 'docker-hub-credentials', url: '']) {
                         sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
                         sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
@@ -43,7 +43,9 @@ pipeline {
         stage('Deploy to K8s') {
             steps {
                 script {
-                    echo "--- Deploying with Helm ---"
+                    echo "DEBUG: Checking Directory Structure"
+                    sh "ls -R"
+                    echo "Deploying with Helm"
                     sh """
                     helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
                         --namespace ${K8S_NAMESPACE} \
