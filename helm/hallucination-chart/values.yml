@@ -1,0 +1,24 @@
+image:
+  repository: nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+  port: 8000
+  nodePort: 30005
+
+ingress:
+  enabled: false
+
+model:
+  enabled: false
+  name: "phobert-hallucination"
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+env:
+  DISABLE_MODEL: "false"
