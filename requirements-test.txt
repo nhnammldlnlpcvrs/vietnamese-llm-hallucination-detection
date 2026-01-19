@@ -4,3 +4,4 @@ pytest-cov==4.1.0
 fastapi>=0.95.0
 httpx>=0.24.0
 pydantic>=1.10.0
+prometheus-fastapi-instrumentator>=6.0.0
