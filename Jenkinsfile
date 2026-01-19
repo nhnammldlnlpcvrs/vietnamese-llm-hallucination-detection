@@ -3,6 +3,7 @@ pipeline {
     
     environment {
         KUBECONFIG = '/var/jenkins_home/.kube/config'
+        
         DOCKER_IMAGE = 'nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection'
         K8S_NAMESPACE = 'hallucination-prod'
         HELM_RELEASE = 'hallucination-app'
@@ -13,6 +14,31 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Unit Test & Coverage') {
+            agent {
+                docker { 
+                    image 'python:3.9-slim' 
+                    args '-u 0:0'
+                }
+            }
+            steps {
+                script {
+                    echo "1. Installing Light Dependencies"
+                    sh "pip install --no-cache-dir -r requirements-test.txt"
+                    
+                    echo "2. Running Tests"
+                    try {
+                        withEnv(['PYTHONPATH=.']) {
+                            sh "pytest --cov=backend --cov-report=term-missing --cov-fail-under=80 tests/"
+                        }
+                    } catch (Exception e) {
+                        echo "TEST FAILED or COVERAGE LOW"
+                        error "Pipeline stopped: Coverage < 80% or Tests Failed."
+                    }
+                }
             }
         }
 
@@ -35,7 +61,7 @@ pipeline {
         stage('Manual Approval') {
             steps {
                 script {
-                    input message: 'Docker Image Built. Deploy to Local K8s?', ok: 'Deploy Now'
+                    input message: 'Tests Passed. Deploy to K8s?', ok: 'Deploy Now'
                 }
             }
         }
@@ -43,8 +69,6 @@ pipeline {
         stage('Deploy to K8s') {
             steps {
                 script {
-                    echo "DEBUG: Checking Directory Structure"
-                    sh "ls -R"
                     echo "Deploying with Helm"
                     sh """
                     helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
