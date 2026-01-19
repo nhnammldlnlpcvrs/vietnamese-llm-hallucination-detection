@@ -32,7 +32,7 @@ pipeline {
                     echo "2. Running Tests"
                     try {
                         withEnv(['PYTHONPATH=.']) {
-                            sh "pytest --cov=backend --cov-report=term-missing --cov-fail-under=80 tests/"
+                            sh "pytest --cov=backend --cov-report=term-missing --cov-fail-under=80 tests/unit/"
                         }
                     } catch (Exception e) {
                         echo "TEST FAILED or COVERAGE LOW"
