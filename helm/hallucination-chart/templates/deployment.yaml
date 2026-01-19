@@ -11,6 +11,8 @@ spec:
     metadata:
       labels:
         app: {{ .Chart.Name }}-backend
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
     spec:
       containers:
         - name: backend

@@ -1,10 +1,12 @@
 # backend/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from backend.routers.predict import router as predict_router
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Hallucination Detection API")
+
+Instrumentator().instrument(app).expose(app)
 
 app.add_middleware(
     CORSMiddleware,
