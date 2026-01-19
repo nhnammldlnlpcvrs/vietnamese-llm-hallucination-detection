@@ -21,7 +21,7 @@ autoscaling:
   maxReplicas: 1
 
 env:
-  DISABLE_MODEL: "false"
+  DISABLE_MODEL: "true"
 
 podAnnotations:
   prometheus.io/scrape: "true"
