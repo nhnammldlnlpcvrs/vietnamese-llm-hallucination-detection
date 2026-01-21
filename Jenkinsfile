@@ -52,7 +52,7 @@ pipeline {
             steps {
                 script {
                     echo "Building Docker Image"
-                    sh "docker build -f docker/Dockerfile.serving -t ${FULL_IMAGE}:${env.BUILD_NUMBER} ."
+                    sh "docker build -f docker/Dockerfile.backend -t ${FULL_IMAGE}:${env.BUILD_NUMBER} ."
                     
                     echo "Pushing to Docker Hub"
                     withDockerRegistry([credentialsId: 'docker-hub-credentials', url: '']) {
