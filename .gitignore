@@ -10,7 +10,7 @@ env/
 .env
 
 # Ignore Model and result directories 
-models/
+models/phobert_finetuned_model/
 result/
 
 # ignore raw data files

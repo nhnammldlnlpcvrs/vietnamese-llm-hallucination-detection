@@ -21,7 +21,7 @@ RUN pip install --upgrade pip && \
       -r requirements-serving.txt
 
 COPY backend backend
-
-COPY models models
+RUN mkdir -p models
+COPY models/lgbm_final_fold_0.txt models/lgbm_final_fold_0.txt
 
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
