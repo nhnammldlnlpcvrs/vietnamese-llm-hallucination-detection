@@ -3,7 +3,7 @@ name: CI Pipeline
 on:
   push:
     branches:
-      - "feature*"
+      - "feature*" 
       - main
   pull_request:
     branches:
@@ -11,7 +11,7 @@ on:
 
 jobs:
   test:
-    name: Test (Docker CI)
+    name: Unit Test & Quality Gate
     runs-on: ubuntu-latest
 
     steps:
@@ -23,40 +23,14 @@ jobs:
             -f docker/Dockerfile.ci \
             -t hallucination-ci .
 
-      - name: Run unit tests (model disabled)
+      - name: Run unit tests (with Coverage)
         run: |
           docker run --rm \
-            -e DISABLE_MODEL=true \
-            -v ${{ github.workspace }}:/workspace \
-            hallucination-ci
+            hallucination-ci \
+            pytest tests/unit --cov=backend --cov-report=xml --cov-fail-under=80
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage.xml
-
-  build:
-    name: Build & Push Serving Image
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build & Push Docker image (Serving)
-        run: |
-          IMAGE=nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection
-
-          docker build -f docker/Dockerfile.serving -t $IMAGE:${{ github.sha }} .
-          docker tag $IMAGE:${{ github.sha }} $IMAGE:latest
-
-          docker push $IMAGE:${{ github.sha }}
-          docker push $IMAGE:latest

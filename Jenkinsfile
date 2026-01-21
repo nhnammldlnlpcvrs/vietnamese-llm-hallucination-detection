@@ -4,10 +4,15 @@ pipeline {
     environment {
         KUBECONFIG = '/var/jenkins_home/.kube/config'
         
-        DOCKER_IMAGE = 'nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection'
+        DOCKER_REGISTRY_USER = 'nhnammldlnlpcvrs'
+        DOCKER_IMAGE_NAME = 'vietnamese-llm-hallucination-detection'
+        FULL_IMAGE = "${DOCKER_REGISTRY_USER}/${DOCKER_IMAGE_NAME}"
+        
         K8S_NAMESPACE = 'hallucination-prod'
         HELM_RELEASE = 'hallucination-app'
-        HELM_CHART_PATH = './helm/hallucination-chart'
+        
+        HELM_CHART_PATH = './kubernetes/charts/hallucination-backend' 
+        HELM_VALUES_FILE = './kubernetes/values/backend-prod.yaml'
     }
 
     stages {
@@ -20,19 +25,20 @@ pipeline {
         stage('Unit Test & Coverage') {
             agent {
                 docker { 
-                    image 'python:3.9-slim' 
+                    image 'python:3.10-slim-bookworm'
                     args '-u 0:0'
                 }
             }
             steps {
                 script {
-                    echo "1. Installing Light Dependencies"
-                    sh "pip install --no-cache-dir -r requirements-test.txt"
+                    echo "Installing Dependencies"
+                    sh "pip install --no-cache-dir -r requirements-ci.txt"
+                    sh "pip install pytest-cov"
                     
-                    echo "2. Running Tests"
+                    echo "Running Tests"
                     try {
                         withEnv(['PYTHONPATH=.']) {
-                            sh "pytest --cov=backend --cov-report=term-missing --cov-fail-under=80 tests/unit/"
+                            sh "pytest tests/unit --cov=backend --cov-report=term-missing --cov-fail-under=80"
                         }
                     } catch (Exception e) {
                         echo "TEST FAILED or COVERAGE LOW"
@@ -46,13 +52,14 @@ pipeline {
             steps {
                 script {
                     echo "Building Docker Image"
-                    sh "docker build -f docker/Dockerfile.serving -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
+                    sh "docker build -f docker/Dockerfile.serving -t ${FULL_IMAGE}:${env.BUILD_NUMBER} ."
                     
                     echo "Pushing to Docker Hub"
                     withDockerRegistry([credentialsId: 'docker-hub-credentials', url: '']) {
-                        sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                        sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
-                        sh "docker push ${DOCKER_IMAGE}:latest"
+                        sh "docker push ${FULL_IMAGE}:${env.BUILD_NUMBER}"
+                        
+                        sh "docker tag ${FULL_IMAGE}:${env.BUILD_NUMBER} ${FULL_IMAGE}:latest"
+                        sh "docker push ${FULL_IMAGE}:latest"
                     }
                 }
             }
@@ -61,7 +68,7 @@ pipeline {
         stage('Manual Approval') {
             steps {
                 script {
-                    input message: 'Tests Passed. Deploy to K8s?', ok: 'Deploy Now'
+                    input message: 'Tests & Build Passed. Deploy to Production K8s?', ok: 'Deploy Now'
                 }
             }
         }
@@ -75,7 +82,7 @@ pipeline {
                         --namespace ${K8S_NAMESPACE} \
                         --create-namespace \
                         --set image.tag=${env.BUILD_NUMBER} \
-                        --set image.repository=${DOCKER_IMAGE} \
+                        --set image.repository=${FULL_IMAGE} \
                         --set model.enabled=false \
                         --set service.type=NodePort \
                         --set service.nodePort=30005 \

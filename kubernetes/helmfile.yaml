@@ -1,0 +1,36 @@
+# kubernetes/helmfile.yaml
+repositories:
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
+  - name: ingress-nginx
+    url: https://kubernetes.github.io/ingress-nginx
+
+environments:
+  default:
+    values:
+      - environment: "default"
+  prod:
+    values:
+      - environment: "prod"
+  staging:
+    values:
+      - environment: "staging"
+
+releases:
+  - name: monitoring-stack
+    namespace: monitoring
+    chart: prometheus-community/kube-prometheus-stack
+
+  - name: ingress-nginx
+    namespace: ingress-nginx
+    chart: ingress-nginx/ingress-nginx
+
+  - name: hallucination-backend
+    namespace: hallucination-{{ .Values.environment }}
+    chart: ./charts/hallucination-backend
+    values:
+      - ./charts/hallucination-backend/values.yaml
+      - values/backend-{{ .Values.environment }}.yaml
+    set:
+      - name: image.tag
+        value: {{ requiredEnv "TAG" | default "latest" }}

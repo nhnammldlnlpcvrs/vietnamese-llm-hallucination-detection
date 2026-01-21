@@ -1,0 +1,10 @@
+# observability/grafana/provisioning/dashboards/dashboard.yaml
+apiVersion: 1
+providers:
+  - name: 'Hallucination Dashboards'
+    folder: 'Hallucination Service'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards

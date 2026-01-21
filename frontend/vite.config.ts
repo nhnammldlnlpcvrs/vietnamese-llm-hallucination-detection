@@ -8,6 +8,14 @@ export default defineConfig({
         tailwindcss(), 
         sveltekit()
     ],
+    server: {
+        host: true,
+        port: 5173,
+        strictPort: true,
+        watch: {
+            usePolling: true
+        }
+    },
     test: {
         environment: 'jsdom',
         globals: true,

@@ -1,0 +1,19 @@
+# observability/prometheus/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hallucination-monitor
+  namespace: monitoring
+  labels:
+    release: monitoring-stack
+spec:
+  selector:
+    matchLabels:
+      app: hallucination-chart-backend
+  namespaceSelector:
+    matchNames:
+      - hallucination-prod
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s

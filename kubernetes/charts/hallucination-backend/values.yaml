@@ -1,0 +1,30 @@
+# kubernetes/charts/hallucination-backend/values.yaml
+image:
+  repository: nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+  port: 8000
+  nodePort: 30005
+
+ingress:
+  enabled: false
+
+model:
+  enabled: false
+  name: "phobert-hallucination"
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+env:
+  DISABLE_MODEL: "true"
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/metrics"
+  prometheus.io/port: "8000"

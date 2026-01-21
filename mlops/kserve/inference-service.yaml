@@ -1,0 +1,19 @@
+# mlops/kserve/inference-service.yaml
+apiVersion: "serving.kserve.io/v1beta1"
+kind: "InferenceService"
+metadata:
+  name: "hallucination-model"
+  namespace: "hallucination-prod"
+  annotations:
+    "sidecar.istio.io/inject": "false"
+    "autoscaling.knative.dev/target": "1" 
+spec:
+  predictor:
+    minReplicas: 0 
+    maxReplicas: 5
+    sklearn:
+      storageUri: "s3://your-bucket/models/hallucination/v1/"
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"

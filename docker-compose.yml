@@ -1,9 +1,112 @@
 version: "3.9"
 
 services:
+  db:
+    image: postgres:15
+    container_name: hallucination-postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=mlflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mlflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-network
+
+  mlflow:
+    container_name: hallucination-mlflow
+    build: 
+      context: .
+      dockerfile: mlops/mlflow/Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlops/mlflow_data:/mlflow
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - BACKEND_STORE_URI=postgresql://user:password@db:5432/mlflow
+      - ARTIFACT_ROOT=/mlflow/artifacts
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://user:password@db:5432/mlflow
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+    networks:
+      - ai-network
+
+  backend:
+    container_name: hallucination-backend
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    environment:
+      MODEL_PATH: /app/models/phobert_finetuned_model
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models
+      - ./backend:/app/backend 
+    depends_on:
+      - mlflow
+    networks:
+      - ai-network
+
+  frontend:
+    container_name: hallucination-frontend
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - ai-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hallucination-prometheus
+    volumes:
+      - ./observability/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml
+    ports:
+      - "9090:9090"
+    networks:
+      - ai-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hallucination-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - ai-network
+      
   ci:
     container_name: hallucination-ci
-    image: hallucination-ci
     build:
       context: .
       dockerfile: docker/Dockerfile.ci
@@ -16,15 +119,12 @@ services:
       --cov=backend
       --cov-report=xml:/workspace/coverage.xml
       --cov-report=term-missing
+    networks:
+      - ai-network
 
-  serving:
-    container_name: hallucination-serving
-    image: hallucination-serving
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.serving
-    environment:
-      DISABLE_MODEL: "false"
-      MODEL_PATH: /models/phobert_finetuned_model
-    ports:
-      - "8001:8000"
+volumes:
+  postgres_data:
+
+networks:
+  ai-network:
+    driver: bridge

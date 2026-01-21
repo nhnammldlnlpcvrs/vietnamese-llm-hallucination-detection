@@ -1,0 +1,32 @@
+# kubernetes/charts/hallucination-backend/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}-backend
+spec:
+  replicas: {{ .Values.autoscaling.minReplicas | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}-backend
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}-backend
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+    spec:
+      containers:
+        - name: backend
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DISABLE_MODEL
+              value: {{ not .Values.model.enabled | quote }}
+            
+            - name: MODEL_PATH
+              value: "/app/models/phobert_finetuned_model"
+          
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
