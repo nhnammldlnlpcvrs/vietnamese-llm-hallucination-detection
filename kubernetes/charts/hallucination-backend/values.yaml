@@ -13,8 +13,9 @@ ingress:
   enabled: false
 
 model:
-  enabled: false
+  enabled: "true"
   name: "phobert-hallucination"
+  path: "vinai/phobert-base"
 
 autoscaling:
   enabled: false
@@ -22,7 +23,7 @@ autoscaling:
   maxReplicas: 1
 
 env:
-  DISABLE_MODEL: "true"
+  DISABLE_MODEL: "false"
 
 podAnnotations:
   prometheus.io/scrape: "true"
