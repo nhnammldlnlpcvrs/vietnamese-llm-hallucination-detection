@@ -83,7 +83,7 @@ pipeline {
                         --create-namespace \
                         --set image.tag=${env.BUILD_NUMBER} \
                         --set image.repository=${FULL_IMAGE} \
-                        --set model.enabled=false \
+                        --set model.enabled=true \
                         --set service.type=NodePort \
                         --set service.nodePort=30005 \
                         --wait
