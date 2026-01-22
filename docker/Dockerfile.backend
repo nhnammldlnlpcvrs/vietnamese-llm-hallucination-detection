@@ -15,10 +15,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements-serving.txt .
 
 RUN pip install --upgrade pip && \
+    pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir kserve==0.11.2 && \
-    pip install --no-cache-dir \
-      --extra-index-url https://download.pytorch.org/whl/cpu \
-      -r requirements-serving.txt
+    pip install --no-cache-dir -r requirements-serving.txt
 
 COPY backend backend
 RUN mkdir -p models
