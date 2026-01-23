@@ -76,18 +76,17 @@ pipeline {
         stage('Deploy to K8s') {
             steps {
                 script {
-                    echo "Deploying with Helm"
-                    sh """
-                    helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
+                    withCredentials([string(credentialsId: 'hf-token', variable: 'HF_TOKEN')]) {
+                        sh """
+                        helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
                         --namespace ${K8S_NAMESPACE} \
                         --create-namespace \
                         --set image.tag=${env.BUILD_NUMBER} \
                         --set image.repository=${FULL_IMAGE} \
-                        --set model.enabled=true \
-                        --set service.type=NodePort \
-                        --set service.nodePort=30005 \
+                        --set secrets.hfToken=${HF_TOKEN} \
                         --wait
-                    """
+                        """
+                    }
                 }
             }
         }

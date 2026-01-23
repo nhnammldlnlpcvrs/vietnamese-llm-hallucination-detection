@@ -24,9 +24,14 @@ spec:
           env:
             - name: DISABLE_MODEL
               value: {{ not .Values.model.enabled | quote }}
-            
+
             - name: MODEL_PATH
               value: "/app/models/phobert_finetuned_model"
-          
+
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-secret
+                  key: token
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

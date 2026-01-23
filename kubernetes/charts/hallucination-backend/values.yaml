@@ -33,6 +33,9 @@ resources:
 env:
   DISABLE_MODEL: "false"
 
+secrets:
+  hfToken: ""
+
 podAnnotations:
   prometheus.io/scrape: "true"
   prometheus.io/path: "/metrics"
