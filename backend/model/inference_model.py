@@ -111,9 +111,9 @@ class HallucinationPipeline:
             self.vistral_tokenizer = AutoTokenizer.from_pretrained(VISTRAL_MODEL_NAME)
             self.vistral_model = AutoModelForCausalLM.from_pretrained(
                 VISTRAL_MODEL_NAME,
-                quantization_config=bnb_config,
-                device_map="auto", 
-                offload_folder="offload"
+                torch_dtype=torch.float32,
+                device_map="cpu",
+                low_cpu_mem_usage=True
             )
 
             print(f"- Loading LightGBM...")
