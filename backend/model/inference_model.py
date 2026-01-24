@@ -21,7 +21,7 @@ PHOBERT_FINETUNED_PATH = "vinai/phobert-base"
 LGBM_PATH = os.path.join(BASE_DIR, "models/lgbm_final_fold_0.txt")
 NLI_MODEL_NAME = "MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli"
 NER_MODEL_NAME = "undertheseanlp/vietnamese-ner-v1.4.0a2"
-VISTRAL_MODEL_NAME = "Viet-Mistral/Vistral-7B-Chat"
+VISTRAL_MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 
 MODEL_PATH = os.getenv("MODEL_PATH", "models/phobert_finetuned_model")
 DISABLE_MODEL = os.getenv("DISABLE_MODEL", "false").lower() == "true"
@@ -69,8 +69,7 @@ class HallucinationPipeline:
             AutoModel, 
             AutoModelForCausalLM, 
             AutoModelForSequenceClassification, 
-            pipeline, 
-            BitsAndBytesConfig
+            pipeline
         )
         from huggingface_hub import login
 
@@ -99,14 +98,7 @@ class HallucinationPipeline:
                 self.ner_pipeline = pipeline("ner", model=fallback, tokenizer=fallback, 
                                              device=-1, aggregation_strategy="simple")
 
-            print(f"- Loading Vistral 7B (GPU/Offload)...")
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                llm_int8_enable_fp32_cpu_offload=True
-            )
+            print(f"- Loading Qwen 1.5B (CPU Optimized)...")
             
             self.vistral_tokenizer = AutoTokenizer.from_pretrained(VISTRAL_MODEL_NAME)
             self.vistral_model = AutoModelForCausalLM.from_pretrained(
