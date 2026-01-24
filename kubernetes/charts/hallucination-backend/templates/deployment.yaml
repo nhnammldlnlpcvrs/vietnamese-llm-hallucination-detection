@@ -32,6 +32,6 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: hf-secret
-                  key: token
+                  key: HF_TOKEN
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
