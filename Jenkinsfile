@@ -75,16 +75,20 @@ pipeline {
 
         stage('Deploy to K8s') {
             steps {
-                withCredentials([string(credentialsId: 'hf-token-id', variable: 'HF_TOKEN')]) {
-                    sh """
-                    helm upgrade --install hallucination-app ./kubernetes/charts/hallucination-backend \
-                        --namespace hallucination-prod \
-                        --create-namespace \
-                        --set image.tag=${env.BUILD_NUMBER} \
-                        --set image.repository=nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection \
-                        --set secrets.hfToken=\$HF_TOKEN \
-                        --wait
-                    """
+                script {
+                    withCredentials([
+                        string(credentialsId: 'hf-token', variable: 'HF_TOKEN')
+                    ]) {
+                        sh """
+                        helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
+                            --namespace ${K8S_NAMESPACE} \
+                            --create-namespace \
+                            --set image.tag=${env.BUILD_NUMBER} \
+                            --set image.repository=${FULL_IMAGE} \
+                            --set secrets.hfToken=\$HF_TOKEN \
+                            --wait
+                        """
+                    }
                 }
             }
         }
