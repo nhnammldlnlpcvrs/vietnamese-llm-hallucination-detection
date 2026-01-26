@@ -1,4 +1,5 @@
 # backend/main.py
+import os
 import time
 import sys
 from fastapi import FastAPI, Request
@@ -11,24 +12,31 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 logger.remove()
 logger.add(
     sys.stdout, 
-    format="{time} | {level} | {message}", 
-    serialize=True
+    format="{time} | {level} | {extra[trace_id]} | {message}",
+    serialize=True,
+    level="INFO"
 )
 
 resource = Resource.create(attributes={
     "service.name": "hallucination-detector-backend",
-    "deployment.environment": "production"
+    "deployment.environment": os.getenv("ENVIRONMENT", "production")
 })
 
 provider = TracerProvider(resource=resource)
-processor = BatchSpanProcessor(OTLPSpanExporter(endpoint="http://jaeger-collector.observability:4317", insecure=True))
+
+if os.getenv("DISABLE_MODEL") == "true":
+    processor = BatchSpanProcessor(ConsoleSpanExporter()) 
+else:
+    jaeger_url = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://jaeger-collector.observability:4317")
+    processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=jaeger_url, insecure=True))
+
 provider.add_span_processor(processor)
 trace.set_tracer_provider(provider)
 
@@ -37,11 +45,14 @@ app = FastAPI(title="Hallucination Detection API - Production Ready")
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
-    response = await call_next(request)
-    process_time = (time.time() - start_time) * 1000
     
     current_span = trace.get_current_span()
-    trace_id = format(current_span.get_span_context().trace_id, '032x')
+    span_context = current_span.get_span_context()
+    trace_id = format(span_context.trace_id, '032x') if span_context.is_valid else "0"
+    
+    response = await call_next(request)
+    
+    process_time = (time.time() - start_time) * 1000
     
     logger.bind(trace_id=trace_id).info(
         f"Path: {request.url.path} Method: {request.method} Status: {response.status_code} Latency: {process_time:.2f}ms"
@@ -49,6 +60,7 @@ async def log_requests(request: Request, call_next):
     return response
 
 Instrumentator().instrument(app).expose(app)
+
 FastAPIInstrumentor.instrument_app(app)
 
 app.add_middleware(
