@@ -24,33 +24,31 @@ pipeline {
         }
 
         stage('Unit Test & Coverage') {
-            agent {
-                docker { 
-                    image 'python:3.10-slim-bookworm'
-                    args '-u 0:0' 
-                }
-            }
             steps {
-                sh "pip install --no-cache-dir -r requirements-ci.txt pytest-cov mlflow"
-                withEnv(['PYTHONPATH=.']) {
-                    sh "pytest tests/unit --cov=backend --cov-report=xml --cov-fail-under=80"
+                script {
+                    sh "docker build -f docker/Dockerfile.ci -t hallucination-ci:latest ."
+                    sh "docker run --rm hallucination-ci:latest"
                 }
             }
         }
 
         stage('Provision Infra (IaC)') {
             steps {
-                sshagent([SSH_KEY_ID]) {
-                    withKubeConfig([credentialsId: "${KUBE_ID}"]) {
+                withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                    withKubeConfig([credentialsId: 'kubeconfig-minikube']) {
                         script {
-                            echo "Terraform applying..."
+                            echo "1. Terraform Applying..."
                             dir('iac/terraform') {
                                 sh "terraform init && terraform apply -auto-approve"
                             }
                             
-                            echo "Ansible configuring..."
+                            echo "2. Ansible Configuring..."
                             dir('iac/ansible') {
-                                sh "export ANSIBLE_HOST_KEY_CHECKING=False && ansible-playbook -i inventory.ini setup_k8s_stack.yml"
+                                sh """
+                                ansible-playbook -i inventory.ini setup_k8s_stack.yml \
+                                --private-key=${SSH_KEY} \
+                                -e "ansible_user=nguyen-nam"
+                                """
                             }
                         }
                     }
