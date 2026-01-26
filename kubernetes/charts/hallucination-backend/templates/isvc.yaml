@@ -1,0 +1,38 @@
+# kubernetes/charts/hallucination-backend/templates/isvc.yaml
+apiVersion: "serving.kserve.io/v1beta1"
+kind: "InferenceService"
+metadata:
+  name: "hallucination-detector"
+  namespace: "hallucination-prod"
+  annotations:
+    "autoscaling.knative.dev/target": "1"
+    "autoscaling.knative.dev/minScale": "0"
+spec:
+  predictor:
+    containers:
+      - name: kserve-container
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        env:
+          - name: STORAGE_URI
+            value: "s3://my-mlflow-bucket/artifacts/1/..." 
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: hf-secret
+                key: token
+        resources:
+          limits:
+            cpu: "4"
+            memory: "12Gi"
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+  transformer:
+    containers:
+      - name: transformer-container
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8080"]
+        resources:
+          limits:
+            cpu: "1"
+            memory: "2Gi"

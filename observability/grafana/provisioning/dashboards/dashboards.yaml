@@ -1,4 +1,4 @@
-# observability/grafana/provisioning/dashboards/dashboard.yaml
+# observability/grafana/provisioning/dashboards/dashboards.yaml
 apiVersion: 1
 providers:
   - name: 'Hallucination Dashboards'

@@ -1,0 +1,11 @@
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: 'filesystem'
+promtail:
+  enabled: true
+  config:
+    clients:
+      - url: http://{{ .Release.Name }}:3100/loki/api/v1/push

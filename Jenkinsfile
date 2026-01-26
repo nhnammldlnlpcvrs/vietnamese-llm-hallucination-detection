@@ -2,24 +2,21 @@ pipeline {
     agent any
     
     environment {
-        KUBECONFIG = '/var/jenkins_home/.kube/config'
-        
+        KUBECONFIG = "/tmp/config-jenkins"
         DOCKER_REGISTRY_USER = 'nhnammldlnlpcvrs'
         DOCKER_IMAGE_NAME = 'vietnamese-llm-hallucination-detection'
         FULL_IMAGE = "${DOCKER_REGISTRY_USER}/${DOCKER_IMAGE_NAME}"
         
         K8S_NAMESPACE = 'hallucination-prod'
         HELM_RELEASE = 'hallucination-app'
+        HELM_CHART_PATH = './kubernetes/charts/hallucination-backend'
         
-        HELM_CHART_PATH = './kubernetes/charts/hallucination-backend' 
-        HELM_VALUES_FILE = './kubernetes/values/backend-prod.yaml'
+        MLFLOW_TRACKING_URI = 'http://mlflow.observability:5000'
     }
 
     stages {
         stage('Checkout') {
-            steps {
-                checkout scm
-            }
+            steps { checkout scm }
         }
 
         stage('Unit Test & Coverage') {
@@ -31,18 +28,25 @@ pipeline {
             }
             steps {
                 script {
-                    echo "Installing Dependencies"
-                    sh "pip install --no-cache-dir -r requirements-ci.txt"
-                    sh "pip install pytest-cov"
+                    sh "pip install --no-cache-dir -r requirements-ci.txt pytest-cov mlflow"
+                    withEnv(['PYTHONPATH=.']) {
+                        sh "pytest tests/unit --cov=backend --cov-report=xml --cov-fail-under=80"
+                    }
+                }
+            }
+        }
+
+        stage('Provision Infra (IaC)') {
+            steps {
+                script {
+                    echo "Provisioning Cloud Cluster with Terraform..."
+                    dir('iac/terraform') {
+                        sh "terraform init && terraform apply -auto-approve"
+                    }
                     
-                    echo "Running Tests"
-                    try {
-                        withEnv(['PYTHONPATH=.']) {
-                            sh "pytest tests/unit --cov=backend --cov-report=term-missing --cov-fail-under=80"
-                        }
-                    } catch (Exception e) {
-                        echo "TEST FAILED or COVERAGE LOW"
-                        error "Pipeline stopped: Coverage < 80% or Tests Failed."
+                    echo "Configuring K8s Stack (Istio, Knative, KServe) with Ansible..."
+                    dir('iac/ansible') {
+                        sh "ansible-playbook -i inventory.ini setup_k8s_stack.yml"
                     }
                 }
             }
@@ -51,13 +55,13 @@ pipeline {
         stage('Build & Push Docker') {
             steps {
                 script {
-                    echo "Building Docker Image"
+                    echo "Pulling latest model artifacts from MLFlow..."
+                    sh "export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI} && python -m mlflow artifacts download --artifact-uri models:/hallu-model/latest --dst ./models/phobert_finetuned_model"
+
                     sh "docker build -f docker/Dockerfile.backend -t ${FULL_IMAGE}:${env.BUILD_NUMBER} ."
                     
-                    echo "Pushing to Docker Hub"
                     withDockerRegistry([credentialsId: 'docker-hub-credentials', url: '']) {
                         sh "docker push ${FULL_IMAGE}:${env.BUILD_NUMBER}"
-                        
                         sh "docker tag ${FULL_IMAGE}:${env.BUILD_NUMBER} ${FULL_IMAGE}:latest"
                         sh "docker push ${FULL_IMAGE}:latest"
                     }
@@ -67,30 +71,31 @@ pipeline {
 
         stage('Manual Approval') {
             steps {
-                script {
-                    input message: 'Tests & Build Passed. Deploy to Production K8s?', ok: 'Deploy Now'
-                }
+                input message: "Build #${env.BUILD_NUMBER} passed tests. Deploy to Cloud K8s?"
             }
         }
 
         stage('Deploy to K8s') {
             steps {
-                script {
-                    withCredentials([
-                        string(credentialsId: 'hf-token', variable: 'HF_TOKEN')
-                    ]) {
-                        sh """
-                        helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
-                            --namespace ${K8S_NAMESPACE} \
-                            --create-namespace \
-                            --set image.tag=${env.BUILD_NUMBER} \
-                            --set image.repository=${FULL_IMAGE} \
-                            --set secrets.hfToken=\$HF_TOKEN \
-                            --wait
-                        """
-                    }
-                }
+                sh "kubectl config get-contexts" 
+                sh """
+                helm upgrade --install hallucination-app ./kubernetes/charts/hallucination-backend \
+                --namespace hallucination-prod \
+                --create-namespace \
+                --set image.tag=${env.BUILD_NUMBER} \
+                --set image.repository=nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection \
+                --set secrets.hfToken=${HF_TOKEN} \
+                --kubeconfig /home/nguyen-nam/.kube/config \
+                --wait
+                """
             }
+        }
+    }
+    
+    post {
+        always {
+            echo "Cleaning up workspace..."
+            cleanWs()
         }
     }
 }

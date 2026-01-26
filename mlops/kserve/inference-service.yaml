@@ -2,18 +2,25 @@
 apiVersion: "serving.kserve.io/v1beta1"
 kind: "InferenceService"
 metadata:
-  name: "hallucination-model"
+  name: "hallucination-detector"
   namespace: "hallucination-prod"
-  annotations:
-    "sidecar.istio.io/inject": "false"
-    "autoscaling.knative.dev/target": "1" 
 spec:
   predictor:
-    minReplicas: 0 
-    maxReplicas: 5
-    sklearn:
-      storageUri: "s3://your-bucket/models/hallucination/v1/"
-      resources:
-        limits:
-          cpu: "1"
-          memory: "2Gi"
+    containers:
+      - name: kserve-container
+        image: "nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection:latest"
+        command: ["/bin/sh", "-c"]
+        args: ["uvicorn backend.main:app --host 0.0.0.0 --port 8080"] 
+        resources:
+          limits:
+            cpu: "2"
+            memory: "8Gi"
+          requests:
+            cpu: "1"
+            memory: "6Gi"
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 60 
+          periodSeconds: 30
+          failureThreshold: 10

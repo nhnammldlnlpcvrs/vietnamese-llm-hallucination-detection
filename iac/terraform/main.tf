@@ -1,47 +1,24 @@
-provider "aws" {
-  region = "ap-southeast-1"
+resource "aws_eks_cluster" "main" {
+  name     = "hallucination-cluster"
+  role_arn = aws_iam_role.eks_cluster.arn
+  
+  vpc_config {
+    subnet_ids = [aws_subnet.private_1.id, aws_subnet.private_2.id]
+  }
 }
 
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "5.0.0"
+resource "null_resource" "update_kubeconfig" {
+  depends_on = [aws_eks_cluster.main]
 
-  name = "hallucination-vpc"
-  cidr = "10.0.0.0/16"
-
-  azs             = ["ap-southeast-1a", "ap-southeast-1b"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
-
-  enable_nat_gateway = true
+  provisioner "local-exec" {
+    command = "aws eks update-kubeconfig --name ${aws_eks_cluster.main.name} --region your-region"
+  }
 }
 
-module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "19.15.0"
+resource "null_resource" "ansible_provisioner" {
+  depends_on = [null_resource.update_kubeconfig]
 
-  cluster_name    = "hallucination-cluster"
-  cluster_version = "1.27"
-
-  vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets
-
-  eks_managed_node_groups = {
-    general = {
-      min_size     = 1
-      max_size     = 3
-      desired_size = 2
-      instance_types = ["t3.medium"]
-    }
-
-    gpu_workers = {
-      min_size     = 0 
-      max_size     = 2
-      desired_size = 0
-      instance_types = ["g4dn.xlarge"]
-      labels = {
-        "role" = "gpu-inference"
-      }
-    }
+  provisioner "local-exec" {
+    command = "ansible-playbook -i ../ansible/inventory.ini ../ansible/setup_k8s_stack.yml"
   }
 }

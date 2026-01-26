@@ -33,5 +33,12 @@ spec:
                 secretKeyRef:
                   name: hf-secret
                   key: HF_TOKEN
+
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger-collector.observability:4317"
+
+            - name: LOKI_URL
+              value: "http://loki.observability:3100/loki/api/v1/push"
+              
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

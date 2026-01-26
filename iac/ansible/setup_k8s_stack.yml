@@ -1,0 +1,64 @@
+---
+- name: "Provision MLOps & Observability Stack"
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: "Add Istio Helm Repo"
+      kubernetes.core.helm_repository:
+        name: istio
+        repo_url: "https://istio-release.storage.googleapis.com/charts"
+
+    - name: "Install Istio Stack"
+      kubernetes.core.helm:
+        name: "{{ item.name }}"
+        chart_ref: "istio/{{ item.chart }}"
+        release_namespace: istio-system
+        create_namespace: true
+        wait: true
+      loop:
+        - { name: "istio-base", chart: "base" }
+        - { name: "istiod", chart: "istiod" }
+
+    - name: "Install Knative Serving (Serverless Core)"
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ item }}"
+      loop:
+        - https://github.com/knative/serving/releases/download/knative-v1.10.0/serving-crds.yaml
+        - https://github.com/knative/serving/releases/download/knative-v1.10.0/serving-core.yaml
+        - https://github.com/knative/net-istio/releases/download/knative-v1.10.0/net-istio.yaml
+
+    - name: "Install KServe"
+      kubernetes.core.k8s:
+        state: present
+        src: https://github.com/kserve/kserve/releases/download/v0.11.0/kserve-install.yaml
+
+    - name: "Install Monitoring Stack (Prometheus + Grafana)"
+      kubernetes.core.helm:
+        name: monitoring
+        chart_ref: prometheus-community/kube-prometheus-stack
+        release_namespace: observability
+        create_namespace: true
+        values:
+          grafana:
+            additionalDataSources:
+              - { name: Loki, type: loki, url: "http://loki-stack.observability:3100" }
+              - { name: Tempo, type: tempo, url: "http://tempo.observability:3100" }
+
+    - name: "Install Loki & Tempo"
+      kubernetes.core.helm:
+        name: "{{ item }}"
+        chart_ref: "grafana/{{ item }}"
+        release_namespace: observability
+      loop:
+        - loki-stack
+        - tempo
+    
+    - name: "Install MLflow via Helm"
+      kubernetes.core.helm:
+        name: mlflow
+        chart_ref: community-charts/mlflow
+        release_namespace: mlflow
+        create_namespace: true
+        values:
+          defaultArtifactRoot: "s3://my-mlflow-bucket"
