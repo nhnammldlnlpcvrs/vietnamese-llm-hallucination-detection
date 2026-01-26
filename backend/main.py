@@ -15,6 +15,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.trace.sampling import ALWAYS_OFF, StaticSampler
 
 logger.remove()
 logger.add(
@@ -29,7 +30,9 @@ resource = Resource.create(attributes={
     "deployment.environment": os.getenv("ENVIRONMENT", "production")
 })
 
-provider = TracerProvider(resource=resource)
+sampler = ALWAYS_OFF if os.getenv("DISABLE_MODEL") == "true" else None
+
+provider = TracerProvider(resource=resource, sampler=sampler)
 
 if os.getenv("DISABLE_MODEL") == "true":
     processor = BatchSpanProcessor(ConsoleSpanExporter()) 
