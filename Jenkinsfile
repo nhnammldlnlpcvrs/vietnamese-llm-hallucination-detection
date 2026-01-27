@@ -34,21 +34,21 @@ pipeline {
 
         stage('Provision Infra (IaC)') {
             steps {
-                script {
-                    withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY')]) {
-                        echo "1. Terraform Applying..."
-                        dir('iac/terraform') {
-                            sh "terraform init && terraform apply -auto-approve"
-                        }
-                        
-                        echo "2. Ansible Configuring..."
-                        dir('iac/ansible') {
-                            sh """
-                            export ANSIBLE_HOST_KEY_CHECKING=False
-                            ansible-playbook -i inventory.ini setup_k8s_stack.yml \
-                            --private-key=${SSH_KEY} \
-                            -u nguyen-nam
-                            """
+                withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                    withKubeConfig([credentialsId: 'kubeconfig-minikube']) {
+                        script {
+                            dir('iac/terraform') {
+                                sh "terraform init && terraform apply -auto-approve"
+                            }
+                            
+                            dir('iac/ansible') {
+                                sh "ansible-galaxy collection install kubernetes.core"
+                                sh """
+                                export ANSIBLE_HOST_KEY_CHECKING=False
+                                ansible-playbook -i inventory.ini setup_k8s_stack.yml \
+                                --private-key=${SSH_KEY}
+                                """
+                            }
                         }
                     }
                 }
