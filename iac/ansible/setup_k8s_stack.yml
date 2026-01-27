@@ -1,37 +1,34 @@
 # iac/ansible/setup_k8s_stack.yml
 ---
 - name: "Provision MLOps & Observability Stack"
-  hosts: nodes
-  become: yes
+  hosts: all
+  gather_facts: no
+  
   tasks:
-    - name: "Check if Minikube is running"
-      command: minikube status
-      register: minikube_check
-      changed_when: false
-
-    - name: "Add Istio Helm Repo"
+    - name: "Add Helm Repositories"
       kubernetes.core.helm_repository:
-        name: istio
-        repo_url: "https://istio-release.storage.googleapis.com/charts"
-        
-    - name: "Add Istio Helm Repo"
-      kubernetes.core.helm_repository:
-        name: istio
-        repo_url: "https://istio-release.storage.googleapis.com/charts"
+        name: "{{ item.name }}"
+        repo_url: "{{ item.url }}"
+      loop:
+        - { name: "istio", url: "https://istio-release.storage.googleapis.com/charts" }
+        - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
+        - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
+        - { name: "community-charts", url: "https://community-charts.github.io/helm-charts" }
 
     - name: "Install Istio Stack"
       kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}" 
         name: "{{ item.name }}"
         chart_ref: "istio/{{ item.chart }}"
         release_namespace: istio-system
-        create_namespace: true
         wait: true
       loop:
         - { name: "istio-base", chart: "base" }
         - { name: "istiod", chart: "istiod" }
 
-    - name: "Install Knative Serving (Serverless Core)"
+    - name: "Install Knative Serving"
       kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
         state: present
         src: "{{ item }}"
       loop:
@@ -41,35 +38,26 @@
 
     - name: "Install KServe"
       kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
         state: present
         src: https://github.com/kserve/kserve/releases/download/v0.11.0/kserve-install.yaml
 
-    - name: "Install Monitoring Stack (Prometheus + Grafana)"
+    - name: "Install Monitoring Stack"
       kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
         name: monitoring
         chart_ref: prometheus-community/kube-prometheus-stack
         release_namespace: observability
-        create_namespace: true
         values:
           grafana:
             additionalDataSources:
               - { name: Loki, type: loki, url: "http://loki-stack.observability:3100" }
-              - { name: Tempo, type: tempo, url: "http://tempo.observability:3100" }
 
-    - name: "Install Loki & Tempo"
-      kubernetes.core.helm:
-        name: "{{ item }}"
-        chart_ref: "grafana/{{ item }}"
-        release_namespace: observability
-      loop:
-        - loki-stack
-        - tempo
-    
     - name: "Install MLflow via Helm"
       kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
         name: mlflow
         chart_ref: community-charts/mlflow
         release_namespace: mlflow
-        create_namespace: true
         values:
           defaultArtifactRoot: "s3://my-mlflow-bucket"

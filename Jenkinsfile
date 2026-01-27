@@ -56,14 +56,14 @@ pipeline {
                             
                             echo "Running Ansible Stack"
                             dir('iac/ansible') {
-                                sh """
+                                sh '''
                                 ansible-galaxy collection install kubernetes.core
                                 export ANSIBLE_HOST_KEY_CHECKING=False
                                 
                                 ansible-playbook -i inventory.ini setup_k8s_stack.yml \
                                 --private-key=${SSH_KEY} \
                                 --extra-vars "ansible_python_interpreter=/usr/bin/python3 kubeconfig_path=${KUBECONFIG_FILE}"
-                                """
+                                '''
                             }
                         }
                     }
