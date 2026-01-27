@@ -41,12 +41,15 @@ pipeline {
                     script {
                         withEnv(["KUBECONFIG=${KUBECONFIG_FILE}"]) {
                             
-                            echo "1. Terraform Apply..."
+                            echo "Checking Connection to Minikube"
+                            sh "kubectl cluster-info"
+                            
+                            echo "Running Terraform"
                             dir('iac/terraform') {
                                 sh "terraform init && terraform apply -auto-approve"
                             }
                             
-                            echo "2. Ansible Provisioning..."
+                            echo "Running Ansible Stack"
                             dir('iac/ansible') {
                                 sh """
                                 ansible-galaxy collection install kubernetes.core
