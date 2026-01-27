@@ -51,6 +51,7 @@ pipeline {
                             echo "Running Terraform"
                             dir('iac/terraform') {
                                 sh "terraform init"
+                                sh "terraform apply -auto-approve -refresh=true"
                                 sh "terraform apply -auto-approve -var='kube_config=${KUBECONFIG_FILE}'"
                             }
                             

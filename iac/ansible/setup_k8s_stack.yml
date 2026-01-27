@@ -5,6 +5,13 @@
   gather_facts: no
   
   tasks:
+    - name: "List all namespaces"
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Namespace
+      register: ns_list
+    - debug: msg="{{ ns_list | json_query('resources[*].metadata.name') }}"
+
     - name: "Add Helm Repositories"
       kubernetes.core.helm_repository:
         name: "{{ item.name }}"
@@ -51,10 +58,22 @@
         name: monitoring
         chart_ref: prometheus-community/kube-prometheus-stack
         release_namespace: observability
+        create_namespace: true
         values:
           grafana:
             additionalDataSources:
               - { name: Loki, type: loki, url: "http://loki-stack.observability:3100" }
+              
+    - name: "Install Loki & Tempo"
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: "{{ item }}"
+        chart_ref: "grafana/{{ item }}"
+        release_namespace: observability
+        create_namespace: true
+      loop:
+        - loki-stack
+        - tempo
 
     - name: "Install MLflow via Helm"
       kubernetes.core.helm:
@@ -62,5 +81,6 @@
         name: mlflow
         chart_ref: community-charts/mlflow
         release_namespace: mlflow
+        create_namespace: true
         values:
           defaultArtifactRoot: "s3://my-mlflow-bucket"
