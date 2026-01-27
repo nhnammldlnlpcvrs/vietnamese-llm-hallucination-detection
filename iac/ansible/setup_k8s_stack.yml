@@ -1,8 +1,19 @@
+# iac/ansible/setup_k8s_stack.yml
 ---
 - name: "Provision MLOps & Observability Stack"
-  hosts: localhost
-  connection: local
+  hosts: nodes
+  become: yes
   tasks:
+    - name: "Check if Minikube is running"
+      command: minikube status
+      register: minikube_check
+      changed_when: false
+
+    - name: "Add Istio Helm Repo"
+      kubernetes.core.helm_repository:
+        name: istio
+        repo_url: "https://istio-release.storage.googleapis.com/charts"
+        
     - name: "Add Istio Helm Repo"
       kubernetes.core.helm_repository:
         name: istio
