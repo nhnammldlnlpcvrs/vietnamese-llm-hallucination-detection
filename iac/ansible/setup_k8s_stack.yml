@@ -41,7 +41,9 @@
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: present
-        src: https://github.com/kserve/kserve/releases/download/v0.11.0/kserve-install.yaml
+        src: "https://github.com/kserve/kserve/releases/download/v0.11.0/kserve.yaml"
+        wait: yes
+        wait_timeout: 300
 
     - name: "Install Monitoring Stack"
       kubernetes.core.helm:
