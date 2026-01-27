@@ -15,7 +15,7 @@ pipeline {
         HELM_RELEASE = 'hallucination-app'
         HELM_CHART_PATH = './kubernetes/charts/hallucination-backend'
         
-        MLFLOW_TRACKING_URI = 'http://host.docker.internal:5000' 
+        MLFLOW_TRACKING_URI = 'http://172.17.0.1:5000' 
     }
 
     stages {
@@ -35,13 +35,13 @@ pipeline {
         stage('Provision Infra (IaC)') {
             steps {
                 withCredentials([
-                    sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY'),
-                    file(credentialsId: 'kubeconfig-minikube', variable: 'KUBECONFIG_FILE')
+                    sshUserPrivateKey(credentialsId: "${SSH_KEY_ID}", keyFileVariable: 'SSH_KEY'),
+                    file(credentialsId: "${KUBE_ID}", variable: 'KUBECONFIG_FILE')
                 ]) {
                     script {
                         withEnv(["KUBECONFIG=${KUBECONFIG_FILE}"]) {
                             
-                            echo "Checking Connection to Minikube"
+                            echo "Verify Connection to Minikube"
                             sh "kubectl cluster-info"
                             
                             echo "Running Terraform"
@@ -52,10 +52,14 @@ pipeline {
                             echo "Running Ansible Stack"
                             dir('iac/ansible') {
                                 sh """
+                                # Cài đặt collection cần thiết cho K8s
                                 ansible-galaxy collection install kubernetes.core
                                 export ANSIBLE_HOST_KEY_CHECKING=False
+                                
+                                # Chạy playbook với file KUBECONFIG đã nhúng
                                 ansible-playbook -i inventory.ini setup_k8s_stack.yml \
-                                --private-key=${SSH_KEY}
+                                --private-key=${SSH_KEY} \
+                                --extra-vars "kubeconfig_path=${KUBECONFIG_FILE}"
                                 """
                             }
                         }
@@ -83,17 +87,22 @@ pipeline {
 
         stage('Deploy to K8s') {
             steps {
-                withCredentials([string(credentialsId: "${HF_TOKEN_ID}", variable: 'HF_TOKEN')]) {
-                    withKubeConfig([credentialsId: "${KUBE_ID}"]) {
-                        sh """
-                        helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
-                        --namespace ${K8S_NAMESPACE} \
-                        --create-namespace \
-                        --set image.tag=${env.BUILD_NUMBER} \
-                        --set image.repository=${FULL_IMAGE} \
-                        --set secrets.hfToken=${HF_TOKEN} \
-                        --wait
-                        """
+                withCredentials([
+                    string(credentialsId: "${HF_TOKEN_ID}", variable: 'HF_TOKEN'),
+                    file(credentialsId: "${KUBE_ID}", variable: 'KUBECONFIG_FILE')
+                ]) {
+                    script {
+                        withEnv(["KUBECONFIG=${KUBECONFIG_FILE}"]) {
+                            sh """
+                            helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
+                            --namespace ${K8S_NAMESPACE} \
+                            --create-namespace \
+                            --set image.tag=${env.BUILD_NUMBER} \
+                            --set image.repository=${FULL_IMAGE} \
+                            --set secrets.hfToken=${HF_TOKEN} \
+                            --wait --timeout 5m
+                            """
+                        }
                     }
                 }
             }
