@@ -34,16 +34,22 @@ pipeline {
 
         stage('Provision Infra (IaC)') {
             steps {
-                withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY')]) {
-                    withKubeConfig([credentialsId: 'kubeconfig-minikube']) {
-                        script {
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY'),
+                    file(credentialsId: 'kubeconfig-minikube', variable: 'KUBECONFIG_FILE')
+                ]) {
+                    script {
+                        withEnv(["KUBECONFIG=${KUBECONFIG_FILE}"]) {
+                            
+                            echo "1. Terraform Apply..."
                             dir('iac/terraform') {
                                 sh "terraform init && terraform apply -auto-approve"
                             }
                             
+                            echo "2. Ansible Provisioning..."
                             dir('iac/ansible') {
-                                sh "ansible-galaxy collection install kubernetes.core"
                                 sh """
+                                ansible-galaxy collection install kubernetes.core
                                 export ANSIBLE_HOST_KEY_CHECKING=False
                                 ansible-playbook -i inventory.ini setup_k8s_stack.yml \
                                 --private-key=${SSH_KEY}
