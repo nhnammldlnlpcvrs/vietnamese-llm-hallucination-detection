@@ -93,6 +93,13 @@ pipeline {
                 ]) {
                     script {
                         withEnv(["KUBECONFIG=${KUBECONFIG_FILE}"]) {
+
+                            echo "Running Terraform"
+                            dir('iac/terraform') {
+                                sh "terraform init"
+                                sh "terraform apply -auto-approve"
+                            }
+
                             sh """
                             helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
                             --namespace ${K8S_NAMESPACE} \
