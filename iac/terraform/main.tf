@@ -1,19 +1,16 @@
 # iac/terraform/main.tf
 
-provider "kubernetes" {
-  # config_path = "~/.kube/config" 
+variable "kube_config" {
+  type    = string
+  default = ""
 }
 
-resource "kubernetes_namespace" "namespaces" {
-  for_each = toset([
-    "istio-system",
-    "knative-serving",
-    "kserve",
-    "observability",
-    "mlflow",
-    "hallucination-prod"
-  ])
-  metadata {
-    name = each.key
+provider "kubernetes" {
+  config_path = var.kube_config != "" ? var.kube_config : null
+}
+
+provider "helm" {
+  kubernetes {
+    config_path = var.kube_config != "" ? var.kube_config : null
   }
 }

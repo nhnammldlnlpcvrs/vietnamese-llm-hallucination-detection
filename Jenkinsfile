@@ -32,34 +32,37 @@ pipeline {
             }
         }
 
-        stage('Provision Infra (IaC)') {
+        stage('Provision Infra (IaC)') {    
             steps {
                 withCredentials([
                     sshUserPrivateKey(credentialsId: "${SSH_KEY_ID}", keyFileVariable: 'SSH_KEY'),
                     file(credentialsId: "${KUBE_ID}", variable: 'KUBECONFIG_FILE')
                 ]) {
                     script {
-                        withEnv(["KUBECONFIG=${KUBECONFIG_FILE}"]) {
+                        withEnv([
+                            "KUBECONFIG=${KUBECONFIG_FILE}",
+                            "TF_VAR_kube_config=${KUBECONFIG_FILE}", 
+                            "ANSIBLE_K8S_AUTH_KUBECONFIG=${KUBECONFIG_FILE}"
+                        ]) {
                             
-                            echo "Verify Connection to Minikube"
+                            echo "Verify Connection"
                             sh "kubectl cluster-info"
                             
                             echo "Running Terraform"
                             dir('iac/terraform') {
-                                sh "terraform init && terraform apply -auto-approve"
+                                sh "terraform init"
+                                sh "terraform apply -auto-approve -var='kube_config=${KUBECONFIG_FILE}'"
                             }
                             
                             echo "Running Ansible Stack"
                             dir('iac/ansible') {
                                 sh """
-                                # Cài đặt collection cần thiết cho K8s
                                 ansible-galaxy collection install kubernetes.core
                                 export ANSIBLE_HOST_KEY_CHECKING=False
                                 
-                                # Chạy playbook với file KUBECONFIG đã nhúng
                                 ansible-playbook -i inventory.ini setup_k8s_stack.yml \
                                 --private-key=${SSH_KEY} \
-                                --extra-vars "kubeconfig_path=${KUBECONFIG_FILE}"
+                                --extra-vars "ansible_python_interpreter=/usr/bin/python3 kubeconfig_path=${KUBECONFIG_FILE}"
                                 """
                             }
                         }
