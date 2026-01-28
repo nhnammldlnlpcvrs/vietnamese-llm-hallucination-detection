@@ -44,12 +44,12 @@
         - https://github.com/knative/serving/releases/download/knative-v1.10.0/serving-core.yaml
         - https://github.com/knative/net-istio/releases/download/knative-v1.10.0/net-istio.yaml
 
-    - name: "Install KServe"
+    - name: "Install KServe (Fix caBundle Error)"
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: present
         src: "https://github.com/kserve/kserve/releases/download/v0.11.0/kserve.yaml"
-        wait: no
+        wait: no 
 
     - name: "Install Monitoring Stack"
       kubernetes.core.helm:
@@ -67,7 +67,7 @@
                 url: http://monitoring-kube-prometheus-prometheus.observability:9090
                 isDefault: true
               - name: Loki
-                type: loxki
+                type: loki 
                 access: proxy
                 url: http://loki-stack.observability:3100
                 isDefault: false
@@ -79,7 +79,7 @@
                 url: http://tempo.observability:3100
                 isDefault: false
 
-    - name: "Install Loki & Tempo"
+    - name: "Install Loki & Tempo (Minimal Config)"
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
         name: "{{ item.name }}"
@@ -93,7 +93,7 @@
         - { name: loki-stack, chart: loki-stack }
         - { name: tempo, chart: tempo }
 
-    - name: "Install MLflow via Helm"
+    - name: "Install MLflow (Fix Schema Error)"
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
         name: mlflow
