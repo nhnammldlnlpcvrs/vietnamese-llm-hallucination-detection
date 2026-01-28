@@ -29,14 +29,6 @@
         - { name: grafana, url: https://grafana.github.io/helm-charts }
         - { name: community-charts, url: https://community-charts.github.io/helm-charts }
 
-    - name: Update Helm repositories
-      kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}"
-        name: dummy
-        chart_ref: istio/base
-        state: absent
-        update_repo_cache: true
-
     - name: Install Istio Base & Control Plane
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
@@ -44,6 +36,7 @@
         chart_ref: "istio/{{ item.chart }}"
         release_namespace: istio-system
         create_namespace: true
+        update_repo_cache: true
         wait: true
       loop:
         - { name: istio-base, chart: base }
