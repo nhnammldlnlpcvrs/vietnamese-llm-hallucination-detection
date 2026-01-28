@@ -2,12 +2,12 @@
 ---
 - name: Provision MLOps & Observability Stack
   hosts: all
-  gather_facts: no
   connection: local
+  gather_facts: no
 
   vars:
     knative_version: v1.10.0
-    kserve_version: v0.11.2 
+    kserve_version: 0.11.0
     istio_namespace: istio-system
 
   tasks:
@@ -30,6 +30,7 @@
         - { name: prometheus-community, url: https://prometheus-community.github.io/helm-charts }
         - { name: grafana, url: https://grafana.github.io/helm-charts }
         - { name: community-charts, url: https://community-charts.github.io/helm-charts }
+        - { name: kserve, url: https://kserve.github.io/charts }
 
     - name: Install Istio Base & Control Plane
       kubernetes.core.helm:
@@ -54,17 +55,7 @@
         - "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-core.yaml"
         - "https://github.com/knative/net-istio/releases/download/knative-{{ knative_version }}/net-istio.yaml"
 
-    - name: Ensure kserve namespace exists
-      kubernetes.core.k8s:
-        kubeconfig: "{{ kubeconfig_path }}"
-        state: present
-        definition:
-          apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: kserve
-
-    - name: Remove old/broken KServe CRDs
+    - name: Cleanup legacy KServe CRDs (Tránh xung đột Helm)
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: absent
@@ -77,21 +68,32 @@
         - servingruntimes.serving.kserve.io
       ignore_errors: true
 
-    - name: Install KServe CRDs (Official Bundle)
-      kubernetes.core.k8s:
+    - name: Install KServe CRDs via Helm
+      kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
-        state: present
-        src: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve-crd.yaml"
+        name: kserve-crd
+        chart_ref: kserve/kserve-crd
+        chart_version: "{{ kserve_version }}"
+        release_namespace: kserve
+        create_namespace: true
         wait: true
 
-    - name: Install KServe Core (Official Bundle)
-      kubernetes.core.k8s:
+    - name: Install KServe Core via Helm
+      kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
-        state: present
-        src: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve.yaml"
+        name: kserve
+        chart_ref: kserve/kserve
+        chart_version: "{{ kserve_version }}"
+        release_namespace: kserve
         wait: true
+        values:
+          kserve:
+            controller:
+              gateway:
+                ingressGateway: istio-ingressgateway
+                ingressNamespace: istio-system
 
-    - name: Install kube-prometheus-stack
+    - name: Install kube-prometheus-stack (Monitoring)
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
         name: monitoring
@@ -100,25 +102,24 @@
         create_namespace: true
         wait: true
 
-    - name: Install Loki
+    - name: Install Loki-Stack (Logging)
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
         name: loki
-        chart_ref: grafana/loki
+        chart_ref: grafana/loki-stack
         release_namespace: observability
         values:
-          grafana:
-            enabled: false
+          grafana: { enabled: false }
+          prometheus: { enabled: false }
 
-    - name: Install Tempo
+    - name: Install Tempo (Tracing)
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
         name: tempo
         chart_ref: grafana/tempo
         release_namespace: observability
         values:
-          grafana:
-            enabled: false
+          grafana: { enabled: false }
 
     - name: Install MLflow
       kubernetes.core.helm:
