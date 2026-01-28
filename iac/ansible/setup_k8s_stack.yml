@@ -3,14 +3,16 @@
 - name: "Provision MLOps & Observability Stack"
   hosts: all
   gather_facts: no
-  
+
   tasks:
     - name: "List all namespaces"
       kubernetes.core.k8s_info:
         kubeconfig: "{{ kubeconfig_path }}"
         kind: Namespace
       register: ns_list
-    - debug: msg="{{ ns_list | json_query('resources[*].metadata.name') }}"
+
+    - debug:
+        msg: "{{ ns_list | json_query('resources[*].metadata.name') }}"
 
     - name: "Add Helm Repositories"
       kubernetes.core.helm_repository:
@@ -22,17 +24,22 @@
         - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
         - { name: "community-charts", url: "https://community-charts.github.io/helm-charts" }
 
-    - name: "Install Istio Stack"
+    - name: "Install Istio Base"
       kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}" 
-        name: "{{ item.name }}"
-        chart_ref: "istio/{{ item.chart }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: istio-base
+        chart_ref: istio/base
         release_namespace: istio-system
         create_namespace: true
         wait: true
-      loop:
-        - { name: "istio-base", chart: "base" }
-        - { name: "istiod", chart: "istiod" }
+
+    - name: "Install Istiod"
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: istiod
+        chart_ref: istio/istiod
+        release_namespace: istio-system
+        wait: true
 
     - name: "Install Knative Serving"
       kubernetes.core.k8s:
@@ -44,12 +51,34 @@
         - https://github.com/knative/serving/releases/download/knative-v1.10.0/serving-core.yaml
         - https://github.com/knative/net-istio/releases/download/knative-v1.10.0/net-istio.yaml
 
-    - name: "Install KServe (Fix caBundle Error)"
+    - name: "Remove broken KServe CRDs (caBundle bug)"
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: absent
+        definition:
+          apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: "{{ item }}"
+      loop:
+        - inferenceservices.serving.kserve.io
+        - predictors.serving.kserve.io
+        - trainedmodels.serving.kserve.io
+      ignore_errors: yes
+
+    - name: "Install KServe CRDs (safe, no caBundle bug)"
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: present
-        src: "https://github.com/kserve/kserve/releases/download/v0.11.0/kserve.yaml"
-        wait: no 
+        src: https://github.com/kserve/kserve/releases/download/v0.11.1/kserve-crd.yaml
+        wait: yes
+
+    - name: "Install KServe Core"
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: present
+        src: https://github.com/kserve/kserve/releases/download/v0.11.0/kserve-core.yaml
+        wait: no
 
     - name: "Install Monitoring Stack"
       kubernetes.core.helm:
@@ -58,6 +87,7 @@
         chart_ref: prometheus-community/kube-prometheus-stack
         release_namespace: observability
         create_namespace: true
+        wait: true
         values:
           grafana:
             additionalDataSources:
@@ -67,7 +97,7 @@
                 url: http://monitoring-kube-prometheus-prometheus.observability:9090
                 isDefault: true
               - name: Loki
-                type: loki 
+                type: loki
                 access: proxy
                 url: http://loki-stack.observability:3100
                 isDefault: false
@@ -79,13 +109,14 @@
                 url: http://tempo.observability:3100
                 isDefault: false
 
-    - name: "Install Loki & Tempo (Minimal Config)"
+    - name: "Install Loki and Tempo"
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
         name: "{{ item.name }}"
         chart_ref: "grafana/{{ item.chart }}"
         release_namespace: observability
         create_namespace: true
+        wait: true
         values:
           grafana:
             enabled: false
@@ -93,12 +124,13 @@
         - { name: loki-stack, chart: loki-stack }
         - { name: tempo, chart: tempo }
 
-    - name: "Install MLflow (Fix Schema Error)"
+    - name: "Install MLflow"
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
         name: mlflow
         chart_ref: community-charts/mlflow
         release_namespace: mlflow
         create_namespace: true
+        wait: true
         values:
           defaultArtifactRoot: "s3://my-mlflow-bucket"
