@@ -61,18 +61,37 @@
         values:
           grafana:
             additionalDataSources:
-              - { name: Loki, type: loki, url: "http://loki-stack.observability:3100" }
-              
+              - name: Prometheus
+                type: prometheus
+                access: proxy
+                url: http://monitoring-kube-prometheus-prometheus.observability:9090
+                isDefault: true
+              - name: Loki
+                type: loxki
+                access: proxy
+                url: http://loki-stack.observability:3100
+                isDefault: false
+                jsonData:
+                  maxLines: 1000
+              - name: Tempo
+                type: tempo
+                access: proxy
+                url: http://tempo.observability:3100
+                isDefault: false
+
     - name: "Install Loki & Tempo"
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
-        name: "{{ item }}"
-        chart_ref: "grafana/{{ item }}"
+        name: "{{ item.name }}"
+        chart_ref: "grafana/{{ item.chart }}"
         release_namespace: observability
         create_namespace: true
+        values:
+          grafana:
+            enabled: false
       loop:
-        - loki-stack
-        - tempo
+        - { name: loki-stack, chart: loki-stack }
+        - { name: tempo, chart: tempo }
 
     - name: "Install MLflow via Helm"
       kubernetes.core.helm:
@@ -82,4 +101,5 @@
         release_namespace: mlflow
         create_namespace: true
         values:
-          defaultArtifactRoot: "s3://my-mlflow-bucket"
+          mlflow:
+            defaultArtifactRoot: "s3://my-mlflow-bucket"
