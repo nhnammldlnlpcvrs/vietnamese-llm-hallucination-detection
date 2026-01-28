@@ -24,22 +24,17 @@
         - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
         - { name: "community-charts", url: "https://community-charts.github.io/helm-charts" }
 
-    - name: "Install Istio Base"
+    - name: "Install Istio Stack"
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
-        name: istio-base
-        chart_ref: istio/base
+        name: "{{ item.name }}"
+        chart_ref: "istio/{{ item.chart }}"
         release_namespace: istio-system
         create_namespace: true
         wait: true
-
-    - name: "Install Istiod"
-      kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}"
-        name: istiod
-        chart_ref: istio/istiod
-        release_namespace: istio-system
-        wait: true
+      loop:
+        - { name: istio-base, chart: base }
+        - { name: istiod, chart: istiod }
 
     - name: "Install Knative Serving"
       kubernetes.core.k8s:
@@ -51,7 +46,7 @@
         - https://github.com/knative/serving/releases/download/knative-v1.10.0/serving-core.yaml
         - https://github.com/knative/net-istio/releases/download/knative-v1.10.0/net-istio.yaml
 
-    - name: "Remove broken KServe CRDs (caBundle bug)"
+    - name: "Remove broken KServe CRDs"
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: absent
@@ -66,12 +61,16 @@
         - trainedmodels.serving.kserve.io
       ignore_errors: yes
 
-    - name: "Install KServe CRDs (safe, no caBundle bug)"
+    - name: "Install KServe CRDs (Raw GitHub)"
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: present
-        src: https://github.com/kserve/kserve/releases/download/v0.11.1/kserve-crd.yaml
+        src: "https://raw.githubusercontent.com/kserve/kserve/release-0.11/config/crd/{{ item }}"
         wait: yes
+      loop:
+        - serving.kserve.io_inferenceservices.yaml
+        - serving.kserve.io_predictors.yaml
+        - serving.kserve.io_trainedmodels.yaml
 
     - name: "Install KServe Core"
       kubernetes.core.k8s:
@@ -93,19 +92,14 @@
             additionalDataSources:
               - name: Prometheus
                 type: prometheus
-                access: proxy
                 url: http://monitoring-kube-prometheus-prometheus.observability:9090
                 isDefault: true
               - name: Loki
                 type: loki
-                access: proxy
                 url: http://loki-stack.observability:3100
                 isDefault: false
-                jsonData:
-                  maxLines: 1000
               - name: Tempo
                 type: tempo
-                access: proxy
                 url: http://tempo.observability:3100
                 isDefault: false
 
@@ -115,8 +109,6 @@
         name: "{{ item.name }}"
         chart_ref: "grafana/{{ item.chart }}"
         release_namespace: observability
-        create_namespace: true
-        wait: true
         values:
           grafana:
             enabled: false
@@ -131,6 +123,5 @@
         chart_ref: community-charts/mlflow
         release_namespace: mlflow
         create_namespace: true
-        wait: true
         values:
           defaultArtifactRoot: "s3://my-mlflow-bucket"
