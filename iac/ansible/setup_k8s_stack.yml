@@ -101,5 +101,4 @@
         release_namespace: mlflow
         create_namespace: true
         values:
-          mlflow:
-            defaultArtifactRoot: "s3://my-mlflow-bucket"
+          defaultArtifactRoot: "s3://my-mlflow-bucket"
