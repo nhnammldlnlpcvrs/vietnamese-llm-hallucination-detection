@@ -92,7 +92,8 @@
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: present
-        src: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve-core.yaml"
+        src: "https://raw.githubusercontent.com/kserve/kserve/release-0.11/config/default/kserve.yaml"
+        wait: true
 
     - name: Install kube-prometheus-stack
       kubernetes.core.helm:
@@ -139,4 +140,4 @@
         release_namespace: mlflow
         create_namespace: true
         values:
-          defaultArtifactRoot: s3://my-mlflow-bucket
+          defaultArtifactRoot: "s3://my-mlflow-bucket"
