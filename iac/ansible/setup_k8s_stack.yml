@@ -3,10 +3,12 @@
 - name: Provision MLOps & Observability Stack
   hosts: all
   gather_facts: no
+  connection: local
 
   vars:
     knative_version: v1.10.0
-    kserve_version: v0.11.0
+    kserve_version: v0.11.2 
+    istio_namespace: istio-system
 
   tasks:
     - name: List all namespaces
@@ -15,7 +17,7 @@
         kind: Namespace
       register: ns_list
 
-    - debug:  
+    - debug:
         msg: "{{ ns_list.resources | map(attribute='metadata.name') | list }}"
 
     - name: Add Helm Repositories
@@ -34,9 +36,8 @@
         kubeconfig: "{{ kubeconfig_path }}"
         name: "{{ item.name }}"
         chart_ref: "istio/{{ item.chart }}"
-        release_namespace: istio-system
+        release_namespace: "{{ istio_namespace }}"
         create_namespace: true
-        update_repo_cache: true
         wait: true
       loop:
         - { name: istio-base, chart: base }
@@ -47,12 +48,13 @@
         kubeconfig: "{{ kubeconfig_path }}"
         state: present
         src: "{{ item }}"
+        wait: true
       loop:
         - "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-crds.yaml"
         - "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-core.yaml"
         - "https://github.com/knative/net-istio/releases/download/knative-{{ knative_version }}/net-istio.yaml"
 
-    - name: Create kserve namespace
+    - name: Ensure kserve namespace exists
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: present
@@ -66,33 +68,27 @@
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: absent
-        definition:
-          apiVersion: apiextensions.k8s.io/v1
-          kind: CustomResourceDefinition
-          metadata:
-            name: "{{ item }}"
+        kind: CustomResourceDefinition
+        name: "{{ item }}"
       loop:
         - inferenceservices.serving.kserve.io
         - trainedmodels.serving.kserve.io
         - clusterservingruntimes.serving.kserve.io
+        - servingruntimes.serving.kserve.io
       ignore_errors: true
 
-    - name: Install KServe CRDs
+    - name: Install KServe CRDs (Official Bundle)
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: present
-        src: "https://raw.githubusercontent.com/kserve/kserve/release-0.11/config/crd/{{ item }}"
+        src: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve-crd.yaml"
         wait: true
-      loop:
-        - serving.kserve.io_inferenceservices.yaml
-        - serving.kserve.io_trainedmodels.yaml
-        - serving.kserve.io_clusterservingruntimes.yaml
 
-    - name: Install KServe Core
+    - name: Install KServe Core (Official Bundle)
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: present
-        src: "https://raw.githubusercontent.com/kserve/kserve/release-0.11/config/default/kserve.yaml"
+        src: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve.yaml"
         wait: true
 
     - name: Install kube-prometheus-stack
@@ -103,34 +99,26 @@
         release_namespace: observability
         create_namespace: true
         wait: true
-        values:
-          grafana:
-            additionalDataSources:
-              - name: Prometheus
-                type: prometheus
-                url: http://monitoring-kube-prometheus-prometheus.observability:9090
-                isDefault: true
-              - name: Loki
-                type: loki
-                url: http://loki-stack.observability:3100
-                isDefault: false
-              - name: Tempo
-                type: tempo
-                url: http://tempo.observability:3100
-                isDefault: false
 
-    - name: Install Loki & Tempo
+    - name: Install Loki
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
-        name: "{{ item.name }}"
-        chart_ref: "grafana/{{ item.chart }}"
+        name: loki
+        chart_ref: grafana/loki
         release_namespace: observability
         values:
           grafana:
             enabled: false
-      loop:
-        - { name: loki-stack, chart: loki-stack }
-        - { name: tempo, chart: tempo }
+
+    - name: Install Tempo
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: tempo
+        chart_ref: grafana/tempo
+        release_namespace: observability
+        values:
+          grafana:
+            enabled: false
 
     - name: Install MLflow
       kubernetes.core.helm:
