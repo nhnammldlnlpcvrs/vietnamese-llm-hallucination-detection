@@ -17,9 +17,6 @@
         kind: Namespace
       register: ns_list
 
-    - debug:
-        msg: "{{ ns_list.resources | map(attribute='metadata.name') | list }}"
-
     - name: Add Helm Repositories
       kubernetes.core.helm_repository:
         name: "{{ item.name }}"
@@ -52,10 +49,10 @@
         wait: true
       loop:
         - "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-crds.yaml"
-        - "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-core.yaml"
-        - "https://github.com/knative/net-istio/releases/download/knative-{{ knative_version }}/net-istio.yaml"
+        - { name: serving-core, src: "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-core.yaml" }
+        - { name: net-istio, src: "https://github.com/knative/net-istio/releases/download/knative-{{ knative_version }}/net-istio.yaml" }
 
-    - name: Cleanup legacy KServe CRDs (Tránh xung đột Helm)
+    - name: Cleanup legacy KServe CRDs
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
         state: absent
@@ -85,7 +82,7 @@
         chart_ref: kserve/kserve
         chart_version: "{{ kserve_version }}"
         release_namespace: kserve
-        wait: true
+        wait: false 
         values:
           kserve:
             controller:
@@ -93,33 +90,23 @@
                 ingressGateway: istio-ingressgateway
                 ingressNamespace: istio-system
 
-    - name: Install kube-prometheus-stack (Monitoring)
+    - name: Install Observability Stack (Prometheus, Loki, Tempo)
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
-        name: monitoring
-        chart_ref: prometheus-community/kube-prometheus-stack
+        name: "{{ item.name }}"
+        chart_ref: "{{ item.chart }}"
         release_namespace: observability
         create_namespace: true
-        wait: true
-
-    - name: Install Loki-Stack (Logging)
-      kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}"
-        name: loki
-        chart_ref: grafana/loki-stack
-        release_namespace: observability
-        values:
-          grafana: { enabled: false }
-          prometheus: { enabled: false }
-
-    - name: Install Tempo (Tracing)
-      kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}"
-        name: tempo
-        chart_ref: grafana/tempo
-        release_namespace: observability
-        values:
-          grafana: { enabled: false }
+        values: "{{ item.values | default({}) }}"
+      loop:
+        - name: monitoring
+          chart: prometheus-community/kube-prometheus-stack
+        - name: loki
+          chart: grafana/loki-stack
+          values: { grafana: { enabled: false }, prometheus: { enabled: false } }
+        - name: tempo
+          chart: grafana/tempo
+          values: { grafana: { enabled: false } }
 
     - name: Install MLflow
       kubernetes.core.helm:
