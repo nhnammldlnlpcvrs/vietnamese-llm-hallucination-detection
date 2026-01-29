@@ -1,108 +1,136 @@
 # iac/ansible/setup_k8s_stack.yml
 ---
 - name: Provision MLOps & Observability Stack
-  hosts: all
-  gather_facts: no
+  hosts: localhost
   connection: local
+  gather_facts: false
 
   vars:
-    knative_version: v1.10.0
-    kserve_version: 0.11.0 
-    istio_namespace: istio-system
+    kubeconfig: "{{ kubeconfig_path | default('~/.kube/config') }}"
+    kserve_version: "v0.16.0"
 
   tasks:
-    - name: Add Helm Repositories
-      kubernetes.core.helm_repository:
-        name: "{{ item.name }}"
-        repo_url: "{{ item.url }}"
-        state: present
-      loop:
-        - { name: istio, url: https://istio-release.storage.googleapis.com/charts }
-        - { name: prometheus-community, url: https://prometheus-community.github.io/helm-charts }
-        - { name: grafana, url: https://grafana.github.io/helm-charts }
-        - { name: community-charts, url: https://community-charts.github.io/helm-charts }
-        - { name: kserve, url: https://modelserving.github.io/charts }
 
-    - name: Install Istio Base & Control Plane
-      kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}"
-        name: "{{ item.name }}"
-        chart_ref: "istio/{{ item.chart }}"
-        release_namespace: "{{ istio_namespace }}"
-        create_namespace: true
-        wait: true
-      loop:
-        - { name: istio-base, chart: base }
-        - { name: istiod, chart: istiod }
+  - name: Add Helm Repositories
+    kubernetes.core.helm_repository:
+      name: "{{ item.name }}"
+      repo_url: "{{ item.url }}"
+    loop:
+      - { name: "istio", url: "https://istio-release.storage.googleapis.com/charts" }
+      - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
+      - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
+      - { name: "community-charts", url: "https://community-charts.github.io/helm-charts" }
 
-    - name: Install Knative Serving
-      kubernetes.core.k8s:
-        kubeconfig: "{{ kubeconfig_path }}"
-        state: present
-        src: "{{ item }}"
-      loop:
-        - "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-crds.yaml"
-        - "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-core.yaml"
-        - "https://github.com/knative/net-istio/releases/download/knative-{{ knative_version }}/net-istio.yaml"
+  - name: Update Helm Repositories
+    ansible.builtin.command: helm repo update
 
-    - name: Ensure kserve namespace exists
-      kubernetes.core.k8s:
-        kubeconfig: "{{ kubeconfig_path }}"
-        state: present
-        definition:
-          apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: kserve
+  - name: Create namespaces
+    kubernetes.core.k8s:
+      kubeconfig: "{{ kubeconfig }}"
+      api_version: v1
+      kind: Namespace
+      name: "{{ item }}"
+      state: present
+    loop:
+      - monitoring
+      - kserve
+      - observability
+      - mlflow
+      - istio-system
 
-    - name: Install KServe CRDs
-      kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}"
-        name: kserve-crd
-        chart_ref: kserve/kserve-crd 
-        chart_version: "{{ kserve_version }}"
-        release_namespace: kserve
-        wait: true
+  - name: Install Istio Base
+    kubernetes.core.helm:
+      name: istio-base
+      chart_ref: istio/base
+      release_namespace: istio-system
+      kubeconfig: "{{ kubeconfig }}"
+      wait: true
 
-    - name: Install KServe Core
-      kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}"
-        name: kserve
-        chart_ref: kserve/kserve
-        chart_version: "{{ kserve_version }}"
-        release_namespace: kserve
-        wait: false
+  - name: Install Istiod
+    kubernetes.core.helm:
+      name: istiod
+      chart_ref: istio/istiod
+      release_namespace: istio-system
+      kubeconfig: "{{ kubeconfig }}"
+      wait: true
+
+  - name: Install KServe Core
+    kubernetes.core.k8s:
+      kubeconfig: "{{ kubeconfig }}"
+      state: present
+      src: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve.yaml"
+
+  - name: Install KServe Knative (Optional)
+    kubernetes.core.k8s:
+      kubeconfig: "{{ kubeconfig }}"
+      state: present
+      src: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve-knative.yaml"
+    ignore_errors: true
+
+  - name: Wait for KServe Pods
+    ansible.builtin.command: kubectl get pods -n kserve
+    register: kserve_pods
+    retries: 10
+    delay: 15
+    until: kserve_pods.rc == 0
+
+  - name: Show KServe Pods
+    ansible.builtin.debug:
+      var: kserve_pods.stdout
+
+  - name: Install Observability Stack
+    kubernetes.core.helm:
+      kubeconfig: "{{ kubeconfig }}"
+      name: "{{ item.name }}"
+      chart_ref: "{{ item.chart }}"
+      release_namespace: observability
+      create_namespace: false
+      values: "{{ item.values | default({}) }}"
+      wait: true
+      timeout: 600
+      atomic: true
+    loop:
+      - name: monitoring
+        chart: prometheus-community/kube-prometheus-stack
         values:
-          kserve:
-            controller:
-              gateway:
-                ingressGateway: istio-ingressgateway
-                ingressNamespace: istio-system
+          grafana:
+            enabled: true
+          prometheus:
+            prometheusSpec:
+              serviceMonitorSelectorNilUsesHelmValues: false
 
-    - name: Install KServe Runtimes
-      kubernetes.core.k8s:
-        kubeconfig: "{{ kubeconfig_path }}"
-        state: present
-        src: "https://github.com/kserve/kserve/releases/download/v{{ kserve_version }}/kserve-runtimes.yaml"
-
-    - name: Install Observability Stack
-      kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}"
-        name: "{{ item.name }}"
-        chart_ref: "{{ item.chart }}"
-        release_namespace: observability
-        create_namespace: true
-        values: "{{ item.values | default({}) }}"
-      loop:
-        - { name: monitoring, chart: prometheus-community/kube-prometheus-stack }
-        - { name: loki, chart: grafana/loki-stack, values: { grafana: { enabled: false } } }
-
-    - name: Install MLflow
-      kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig_path }}"
-        name: mlflow
-        chart_ref: community-charts/mlflow
-        release_namespace: mlflow
-        create_namespace: true
+      - name: loki
+        chart: grafana/loki-stack
         values:
-          defaultArtifactRoot: "s3://my-mlflow-bucket"
+          grafana:
+            enabled: false
+          promtail:
+            enabled: true
+
+  - name: Install MLflow
+    kubernetes.core.helm:
+      kubeconfig: "{{ kubeconfig }}"
+      name: mlflow
+      chart_ref: community-charts/mlflow
+      release_namespace: mlflow
+      create_namespace: false
+      wait: true
+      timeout: 600
+      atomic: true
+      values:
+        backendStore:
+          sqlite:
+            enabled: true
+        artifactRoot:
+          pvc:
+            enabled: true
+            size: 5Gi
+        service:
+          type: ClusterIP
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
