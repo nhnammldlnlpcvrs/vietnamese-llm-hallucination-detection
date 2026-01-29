@@ -11,23 +11,17 @@
     istio_namespace: istio-system
 
   tasks:
-    - name: List all namespaces
-      kubernetes.core.k8s_info:
-        kubeconfig: "{{ kubeconfig_path }}"
-        kind: Namespace
-      register: ns_list
-
     - name: Add Helm Repositories
       kubernetes.core.helm_repository:
         name: "{{ item.name }}"
         repo_url: "{{ item.url }}"
         state: present
       loop:
-        - { name: istio, url: https://istio-release.storage.googleapis.com/charts }
-        - { name: prometheus-community, url: https://prometheus-community.github.io/helm-charts }
-        - { name: grafana, url: https://grafana.github.io/helm-charts }
-        - { name: community-charts, url: https://community-charts.github.io/helm-charts }
-        - { name: kserve, url: https://kserve.github.io/charts }
+        - { name: istio, url: "https://istio-release.storage.googleapis.com/charts" }
+        - { name: prometheus-community, url: "https://prometheus-community.github.io/helm-charts" }
+        - { name: grafana, url: "https://grafana.github.io/helm-charts" }
+        - { name: community-charts, url: "https://community-charts.github.io/helm-charts" }
+        - { name: kserve, url: "https://modelserving.github.io/charts" } # Link repo chuẩn
 
     - name: Install Istio Base & Control Plane
       kubernetes.core.helm:
@@ -49,8 +43,8 @@
         wait: true
       loop:
         - "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-crds.yaml"
-        - { name: serving-core, src: "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-core.yaml" }
-        - { name: net-istio, src: "https://github.com/knative/net-istio/releases/download/knative-{{ knative_version }}/net-istio.yaml" }
+        - "https://github.com/knative/serving/releases/download/knative-{{ knative_version }}/serving-core.yaml"
+        - "https://github.com/knative/net-istio/releases/download/knative-{{ knative_version }}/net-istio.yaml"
 
     - name: Cleanup legacy KServe CRDs
       kubernetes.core.k8s:
@@ -82,7 +76,7 @@
         chart_ref: kserve/kserve
         chart_version: "{{ kserve_version }}"
         release_namespace: kserve
-        wait: false 
+        wait: false
         values:
           kserve:
             controller:
@@ -90,7 +84,7 @@
                 ingressGateway: istio-ingressgateway
                 ingressNamespace: istio-system
 
-    - name: Install Observability Stack (Prometheus, Loki, Tempo)
+    - name: Install Observability Stack
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig_path }}"
         name: "{{ item.name }}"
@@ -99,14 +93,9 @@
         create_namespace: true
         values: "{{ item.values | default({}) }}"
       loop:
-        - name: monitoring
-          chart: prometheus-community/kube-prometheus-stack
-        - name: loki
-          chart: grafana/loki-stack
-          values: { grafana: { enabled: false }, prometheus: { enabled: false } }
-        - name: tempo
-          chart: grafana/tempo
-          values: { grafana: { enabled: false } }
+        - { name: monitoring, chart: prometheus-community/kube-prometheus-stack }
+        - { name: loki, chart: grafana/loki-stack, values: { grafana: { enabled: false }, prometheus: { enabled: false } } }
+        - { name: tempo, chart: grafana/tempo, values: { grafana: { enabled: false } } }
 
     - name: Install MLflow
       kubernetes.core.helm:
