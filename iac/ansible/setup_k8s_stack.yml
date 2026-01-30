@@ -7,8 +7,7 @@
 
   vars:
     kubeconfig: "{{ kubeconfig_path | default('~/.kube/config') }}"
-
-    kserve_version: "v0.14.1" 
+    kserve_version: "v0.14.1"
     istio_namespace: istio-system
 
   tasks:
@@ -21,6 +20,7 @@
         - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
         - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
         - { name: "community-charts", url: "https://community-charts.github.io/helm-charts" }
+        - { name: "jetstack", url: "https://charts.jetstack.io" }   # FIX
 
     - name: Update Helm Repositories
       ansible.builtin.command: helm repo update
@@ -32,7 +32,31 @@
         kind: Namespace
         name: "{{ item }}"
         state: present
-      loop: [monitoring, kserve, observability, mlflow, istio-system]
+      loop:
+        [monitoring, kserve, observability, mlflow, istio-system, cert-manager]
+
+    - name: Install Cert-Manager
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig }}"
+        name: cert-manager
+        chart_ref: jetstack/cert-manager
+        release_namespace: cert-manager
+        create_namespace: true
+        values:
+          installCRDs: true
+        wait: true
+        timeout: 600s
+        atomic: true
+
+    - name: Wait Cert Manager Pods Ready
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig }}"
+        kind: Pod
+        namespace: cert-manager
+      register: cert_pods
+      until: cert_pods.resources | length > 0
+      retries: 12
+      delay: 10
 
     - name: Install Istio (Base & Istiod)
       kubernetes.core.helm:
@@ -41,6 +65,8 @@
         chart_ref: "istio/{{ item.chart }}"
         release_namespace: "{{ istio_namespace }}"
         wait: true
+        timeout: 600s
+        atomic: true
       loop:
         - { name: istio-base, chart: base }
         - { name: istiod, chart: istiod }
@@ -53,6 +79,7 @@
         release_namespace: "{{ istio_namespace }}"
         wait: true
         timeout: 900s
+        atomic: true
       register: gateway_install
       until: gateway_install is succeeded
       retries: 2
@@ -72,7 +99,7 @@
         name: inferenceservices.serving.kserve.io
       register: kserve_crd_ready
       until: kserve_crd_ready.resources | length > 0
-      retries: 10
+      retries: 12
       delay: 5
 
     - name: Install KServe Core (Controllers & Webhooks)
@@ -118,18 +145,9 @@
         timeout: 600s
         atomic: true
         values:
-          artifact:
-            persistence:
-              enabled: true
-              size: 5Gi
-              accessMode: ReadWriteOnce
-
-          backendStore:
-            persistence:
-              enabled: true
-              size: 1Gi
-              accessMode: ReadWriteOnce
+          persistence:
+            enabled: true
+            size: 5Gi
 
           service:
             type: ClusterIP
-
