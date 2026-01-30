@@ -45,7 +45,7 @@
       loop: [absent, present]
       ignore_errors: true
 
-    - name: Clean up existing cert-manager CRDs
+    - name: Clean up cert-manager CRDs (Cluster-wide)
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig }}"
         state: absent
@@ -59,6 +59,32 @@
         - clusterissuers.cert-manager.io
         - issuers.cert-manager.io
         - orders.acme.cert-manager.io
+      ignore_errors: true
+
+    - name: Clean up cert-manager Cluster RBAC (Fix Ownership Error)
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: absent
+        api_version: rbac.authorization.k8s.io/v1
+        kind: "{{ item.kind }}"
+        name: "{{ item.name }}"
+      loop:
+        - { kind: ClusterRole, name: cert-manager-cainjector }
+        - { kind: ClusterRole, name: cert-manager-controller-issuers }
+        - { kind: ClusterRole, name: cert-manager-controller-clusterissuers }
+        - { kind: ClusterRole, name: cert-manager-controller-certificates }
+        - { kind: ClusterRole, name: cert-manager-controller-orders }
+        - { kind: ClusterRole, name: cert-manager-controller-challenges }
+        - { kind: ClusterRole, name: cert-manager-controller-ingress-shim }
+        - { kind: ClusterRole, name: cert-manager-view }
+        - { kind: ClusterRole, name: cert-manager-edit }
+        - { kind: ClusterRoleBinding, name: cert-manager-cainjector }
+        - { kind: ClusterRoleBinding, name: cert-manager-controller-issuers }
+        - { kind: ClusterRoleBinding, name: cert-manager-controller-clusterissuers }
+        - { kind: ClusterRoleBinding, name: cert-manager-controller-certificates }
+        - { kind: ClusterRoleBinding, name: cert-manager-controller-orders }
+        - { kind: ClusterRoleBinding, name: cert-manager-controller-challenges }
+        - { kind: ClusterRoleBinding, name: cert-manager-controller-ingress-shim }
       ignore_errors: true
 
     - name: Install Cert-Manager
