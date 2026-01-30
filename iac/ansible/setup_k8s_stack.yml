@@ -52,11 +52,14 @@
         state: absent
       ignore_errors: true
 
-    - name: Wait cert-manager namespace fully deleted
-      ansible.builtin.shell: |
-        kubectl get ns cert-manager --no-headers || exit 0
-      register: ns_deleted
-      until: ns_deleted.rc != 0
+    - name: Wait cert-manager namespace gone
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig }}"
+        api_version: v1
+        kind: Namespace
+        name: cert-manager
+      register: ns_info
+      until: ns_info.resources | length == 0
       retries: 20
       delay: 3
 
@@ -113,6 +116,10 @@
         timeout: 600s
         atomic: true
         cleanup_on_fail: true
+
+    - name: Wait Cert-Manager Pods Ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
 
     - name: Install Istio Base & Istiod
       kubernetes.core.helm:
@@ -176,7 +183,7 @@
         state: present
         src: /tmp/kserve.yaml
 
-    - name: Install Prometheus, Grafana
+    - name: Install Prometheus & Grafana
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig }}"
         name: monitoring
@@ -193,6 +200,8 @@
         name: loki
         chart_ref: grafana/loki-stack
         release_namespace: observability
+        wait: true
+        timeout: 600s
         atomic: true
         cleanup_on_fail: true
 
