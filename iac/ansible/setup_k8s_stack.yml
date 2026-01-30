@@ -102,6 +102,17 @@
         kubectl get mutatingwebhookconfiguration,validatingwebhookconfiguration -o name | grep cert-manager | xargs -r kubectl delete
       ignore_errors: true
 
+    - name: Force delete cert-manager Roles in kube-system
+      ansible.builtin.shell: |
+        kubectl get role -n kube-system -o name | grep cert-manager | xargs -r kubectl delete -n kube-system
+      ignore_errors: true
+
+    - name: Force delete cert-manager RoleBindings in kube-system
+      ansible.builtin.shell: |
+        kubectl get rolebinding -n kube-system -o name | grep cert-manager | xargs -r kubectl delete -n kube-system
+      ignore_errors: true
+
+
     - name: Install Cert-Manager
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig }}"
@@ -110,6 +121,7 @@
         chart_version: v1.14.5
         release_namespace: cert-manager
         create_namespace: true
+        update_repo_cache: true
         values:
           installCRDs: true
         wait: true
