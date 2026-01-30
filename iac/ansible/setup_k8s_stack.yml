@@ -52,7 +52,7 @@
         chart_ref: istio/gateway
         release_namespace: "{{ istio_namespace }}"
         wait: true
-        timeout: 900
+        timeout: 900s
       register: gateway_install
       until: gateway_install is succeeded
       retries: 2
@@ -113,9 +113,23 @@
         name: mlflow
         chart_ref: community-charts/mlflow
         release_namespace: mlflow
-        values:
-          backendStore: { sqlite: { enabled: true } }
-          artifactRoot: { pvc: { enabled: true, size: 5Gi } }
+        create_namespace: false
         wait: true
         timeout: 600s
         atomic: true
+        values:
+          artifact:
+            persistence:
+              enabled: true
+              size: 5Gi
+              accessMode: ReadWriteOnce
+
+          backendStore:
+            persistence:
+              enabled: true
+              size: 1Gi
+              accessMode: ReadWriteOnce
+
+          service:
+            type: ClusterIP
+
