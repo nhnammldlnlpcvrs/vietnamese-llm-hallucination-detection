@@ -35,6 +35,20 @@
       loop:
         [monitoring, kserve, observability, mlflow, istio-system, cert-manager]
 
+    - name: Cleanup existing Cert-Manager resources if any
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: absent
+        api_version: v1
+        kind: ServiceAccount
+        name: "{{ item }}"
+        namespace: cert-manager
+      loop:
+        - cert-manager
+        - cert-manager-cainjector
+        - cert-manager-webhook
+      ignore_errors: true
+
     - name: Install Cert-Manager
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig }}"
@@ -47,6 +61,7 @@
         wait: true
         timeout: 600s
         atomic: true
+        force: true
 
     - name: Wait Cert Manager Pods Ready
       kubernetes.core.k8s_info:
@@ -145,9 +160,14 @@
         timeout: 600s
         atomic: true
         values:
+          backendStore:
+            postgres: { enabled: false }
+            mysql: { enabled: false }
           persistence:
             enabled: true
             size: 5Gi
-
+            accessMode: ReadWriteOnce
+            mountPath: /mlflow
+          defaultArtifactRoot: /mlflow/artifacts
           service:
             type: ClusterIP
