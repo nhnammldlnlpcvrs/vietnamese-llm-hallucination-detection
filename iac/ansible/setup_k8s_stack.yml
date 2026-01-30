@@ -115,7 +115,6 @@
         wait: true
         timeout: 600s
         atomic: true
-        cleanup_on_fail: true
 
     - name: Wait Cert-Manager Pods Ready
       ansible.builtin.shell: |
@@ -130,7 +129,6 @@
         wait: true
         timeout: 600s
         atomic: true
-        cleanup_on_fail: true
       loop:
         - { name: istio-base, chart: base }
         - { name: istiod, chart: istiod }
@@ -148,7 +146,6 @@
         wait: true
         timeout: 900s
         atomic: true
-        cleanup_on_fail: true
 
     - name: Enable Istio Injection Default NS
       kubernetes.core.k8s:
@@ -192,7 +189,6 @@
         wait: true
         timeout: 600s
         atomic: true
-        cleanup_on_fail: true
 
     - name: Install Loki
       kubernetes.core.helm:
@@ -203,7 +199,6 @@
         wait: true
         timeout: 600s
         atomic: true
-        cleanup_on_fail: true
 
     - name: Install MLflow
       kubernetes.core.helm:
@@ -214,7 +209,6 @@
         wait: true
         timeout: 600s
         atomic: true
-        cleanup_on_fail: true
         values:
           backendStore:
             postgres: { enabled: false }
