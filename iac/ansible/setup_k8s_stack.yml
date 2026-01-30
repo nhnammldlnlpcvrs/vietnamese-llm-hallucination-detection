@@ -11,6 +11,7 @@
     istio_namespace: istio-system
 
   tasks:
+
     - name: Add Helm Repositories
       kubernetes.core.helm_repository:
         name: "{{ item.name }}"
@@ -20,10 +21,11 @@
         - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
         - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
         - { name: "community-charts", url: "https://community-charts.github.io/helm-charts" }
-        - { name: "jetstack", url: "https://charts.jetstack.io" }   # FIX
+        - { name: "jetstack", url: "https://charts.jetstack.io" }
 
     - name: Update Helm Repositories
       ansible.builtin.command: helm repo update
+      changed_when: false
 
     - name: Create namespaces
       kubernetes.core.k8s:
@@ -33,21 +35,24 @@
         name: "{{ item }}"
         state: present
       loop:
-        [monitoring, kserve, observability, mlflow, istio-system, cert-manager]
+        [monitoring, kserve, observability, mlflow, istio-system]
 
-    - name: Cleanup existing Cert-Manager resources if any
+    - name: Ensure cert-manager namespace clean
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig }}"
-        state: absent
         api_version: v1
-        kind: ServiceAccount
-        name: "{{ item }}"
-        namespace: cert-manager
-      loop:
-        - cert-manager
-        - cert-manager-cainjector
-        - cert-manager-webhook
+        kind: Namespace
+        name: cert-manager
+        state: absent
       ignore_errors: true
+
+    - name: Recreate cert-manager namespace
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        api_version: v1
+        kind: Namespace
+        name: cert-manager
+        state: present
 
     - name: Install Cert-Manager
       kubernetes.core.helm:
@@ -55,25 +60,27 @@
         name: cert-manager
         chart_ref: jetstack/cert-manager
         release_namespace: cert-manager
-        create_namespace: true
+        create_namespace: false
         values:
           installCRDs: true
         wait: true
         timeout: 600s
         atomic: true
-        force: true
 
-    - name: Wait Cert Manager Pods Ready
+    - name: Wait Cert Manager Pods Running
       kubernetes.core.k8s_info:
         kubeconfig: "{{ kubeconfig }}"
         kind: Pod
         namespace: cert-manager
       register: cert_pods
-      until: cert_pods.resources | length > 0
-      retries: 12
+      until: cert_pods.resources
+             | selectattr('status.phase','equalto','Running')
+             | list
+             | length > 1
+      retries: 20
       delay: 10
 
-    - name: Install Istio (Base & Istiod)
+    - name: Install Istio Base & Istiod
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig }}"
         name: "{{ item.name }}"
@@ -95,18 +102,26 @@
         wait: true
         timeout: 900s
         atomic: true
-      register: gateway_install
-      until: gateway_install is succeeded
-      retries: 2
 
-    - name: Install KServe Cluster Resources (CRDs & RBAC)
+    - name: Enable Istio Sidecar Injection
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        api_version: v1
+        kind: Namespace
+        name: default
+        definition:
+          metadata:
+            labels:
+              istio-injection: enabled
+
+    - name: Install KServe CRDs & RBAC
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig }}"
         state: present
         src: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve-cluster-resources.yaml"
         wait: true
 
-    - name: Wait for KServe CRDs to be ready
+    - name: Wait KServe CRD Ready
       kubernetes.core.k8s_info:
         kubeconfig: "{{ kubeconfig }}"
         api_version: apiextensions.k8s.io/v1
@@ -114,40 +129,37 @@
         name: inferenceservices.serving.kserve.io
       register: kserve_crd_ready
       until: kserve_crd_ready.resources | length > 0
-      retries: 12
+      retries: 15
       delay: 5
 
-    - name: Install KServe Core (Controllers & Webhooks)
+    - name: Install KServe Core
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig }}"
         state: present
         src: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve.yaml"
         wait: true
 
-    - name: Install Observability Stack
+    - name: Install Monitoring Stack
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig }}"
-        name: "{{ item.name }}"
-        chart_ref: "{{ item.chart }}"
+        name: monitoring
+        chart_ref: prometheus-community/kube-prometheus-stack
         release_namespace: observability
-        create_namespace: false
-        values: "{{ item['values'] | default({}) }}"
         wait: true
         timeout: 600s
         atomic: true
-      loop:
-        - name: monitoring
-          chart: prometheus-community/kube-prometheus-stack
-          values:
-            grafana: { enabled: true }
-            prometheus:
-              prometheusSpec:
-                serviceMonitorSelectorNilUsesHelmValues: false
-        - name: loki
-          chart: grafana/loki-stack
-          values:
-            grafana: { enabled: false }
-            promtail: { enabled: true }
+        values:
+          grafana: { enabled: true }
+
+    - name: Install Loki
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig }}"
+        name: loki
+        chart_ref: grafana/loki-stack
+        release_namespace: observability
+        wait: true
+        timeout: 600s
+        atomic: true
 
     - name: Install MLflow
       kubernetes.core.helm:
@@ -155,7 +167,6 @@
         name: mlflow
         chart_ref: community-charts/mlflow
         release_namespace: mlflow
-        create_namespace: false
         wait: true
         timeout: 600s
         atomic: true
