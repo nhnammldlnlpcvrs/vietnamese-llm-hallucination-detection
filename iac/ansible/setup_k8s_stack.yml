@@ -35,7 +35,7 @@
         state: present
       loop: [monitoring, kserve, observability, mlflow, istio-system]
 
-    - name: Ensure cert-manager namespace is fresh 
+    - name: Ensure cert-manager namespace is fresh
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig }}"
         api_version: v1
@@ -43,6 +43,22 @@
         name: cert-manager
         state: "{{ item }}"
       loop: [absent, present]
+      ignore_errors: true
+
+    - name: Clean up existing cert-manager CRDs
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: absent
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: "{{ item }}"
+      loop:
+        - certificates.cert-manager.io
+        - certificaterequests.cert-manager.io
+        - challenges.acme.cert-manager.io
+        - clusterissuers.cert-manager.io
+        - issuers.cert-manager.io
+        - orders.acme.cert-manager.io
       ignore_errors: true
 
     - name: Install Cert-Manager
@@ -65,7 +81,7 @@
       register: cert_pods
       until: 
         - cert_pods.resources | length > 0
-        - cert_pods.resources | selectattr('status.phase','equalto','Running') | list | length >= 2
+        - cert_pods.resources | selectattr('status.phase','equalto','Running') | list | length >= 1
       retries: 20
       delay: 10
 
