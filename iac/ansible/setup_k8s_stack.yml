@@ -87,12 +87,38 @@
         - { kind: ClusterRoleBinding, name: cert-manager-controller-ingress-shim }
       ignore_errors: true
 
+    - name: Clean up cert-manager Webhooks
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: absent
+        api_version: admissionregistration.k8s.io/v1
+        kind: "{{ item.kind }}"
+        name: "{{ item.name }}"
+      loop:
+        - { kind: MutatingWebhookConfiguration, name: cert-manager-webhook }
+        - { kind: ValidatingWebhookConfiguration, name: cert-manager-webhook }
+      ignore_errors: true
+
+    - name: Clean up cert-manager Approve ClusterRoles
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: absent
+        api_version: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        name: "{{ item }}"
+      loop:
+        - cert-manager-controller-approve:cert-manager-io
+        - cert-manager-controller-approve:cert-manager-k8s-io
+      ignore_errors: true
+
     - name: Install Cert-Manager
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig }}"
         name: cert-manager
         chart_ref: jetstack/cert-manager
+        chart_version: v1.14.5
         release_namespace: cert-manager
+        create_namespace: true
         values:
           installCRDs: true
         wait: true
