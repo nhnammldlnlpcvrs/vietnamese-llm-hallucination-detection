@@ -274,9 +274,10 @@
 
     - name: Wait Prometheus Ready
       ansible.builtin.shell: |
-        kubectl rollout status statefulset \
-        monitoring-kube-prometheus-stack-prometheus \
-        -n observability --timeout=600s
+        kubectl get sts -n observability \
+        -l app.kubernetes.io/name=prometheus \
+        -o name | \
+        xargs -r kubectl rollout status -n observability --timeout=600s
       ignore_errors: true
   
     - name: Cleanup old Grafana pods if stuck
