@@ -264,6 +264,13 @@
           grafana:
             enabled: true
             adminPassword: admin
+
+            sidecar:
+              dashboards:
+                enabled: false
+              datasources:
+                enabled: false
+
             resources:
               requests:
                 cpu: 50m
@@ -314,25 +321,11 @@
 
     - name: Install MLflow
       kubernetes.core.helm:
-        kubeconfig: "{{ kubeconfig }}"
         name: mlflow
         chart_ref: community-charts/mlflow
         release_namespace: mlflow
+        create_namespace: true
         wait: true
         timeout: 600s
-        atomic: false
-        values:
-          backendStore:
-            sqlite:
-              enabled: true
+        values: "{{ lookup('file', 'values-mlflow.yaml') | from_yaml }}"
 
-          artifactStore:
-            local:
-              enabled: true
-              path: /mlruns
-              persistence:
-                enabled: true
-                size: 5Gi
-
-          service:
-            type: ClusterIP

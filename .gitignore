@@ -8,6 +8,8 @@ __pycache__/
 venv/
 env/
 .env
+.venv/
+.vscode/
 
 # Ignore Model and result directories 
 models/phobert_finetuned_model/
