@@ -228,7 +228,7 @@
         -l control-plane=kserve-controller-manager \
         -n kserve --timeout=300s
 
-        - name: Install Prometheus and Grafana Stack 
+    - name: Install Prometheus and Grafana Stack 
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig }}"
         name: monitoring
