@@ -15,20 +15,14 @@
       kubernetes.core.helm_repository:
         name: "{{ item.name }}"
         repo_url: "{{ item.url }}"
+        state: present
+        update_cache: true
       loop:
         - { name: "istio", url: "https://istio-release.storage.googleapis.com/charts" }
         - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
         - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
         - { name: "community-charts", url: "https://community-charts.github.io/helm-charts" }
         - { name: "jetstack", url: "https://charts.jetstack.io" }
-
-    - name: Update Helm Repositories
-      ansible.builtin.command: helm repo update
-      register: helm_update
-      retries: 3
-      delay: 5
-      until: helm_update.rc == 0
-      changed_when: false
 
     - name: Create Namespaces
       kubernetes.core.k8s:
@@ -132,6 +126,11 @@
       ansible.builtin.shell: |
         kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
 
+    - name: Wait cert-manager webhook ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=available deployment/cert-manager-webhook \
+        -n cert-manager --timeout=300s
+
     - name: Install Istio Base & Istiod
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig }}"
@@ -159,6 +158,23 @@
         timeout: 900s
         atomic: true
 
+    - name: Wait Istio Ingress Gateway Ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=ready pod \
+        -l app=istio-ingressgateway \
+        -n {{ istio_namespace }} --timeout=300s
+
+
+    - name: Enable Istio injection for kserve namespace
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        kind: Namespace
+        name: kserve
+        definition:
+          metadata:
+            labels:
+              istio-injection: enabled
+
     - name: Enable Istio Injection Default NS
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig }}"
@@ -181,6 +197,12 @@
         state: present
         src: /tmp/kserve-cluster.yaml
 
+    - name: Wait KServe CRDs ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=established crd \
+        inferenceservices.serving.kserve.io \
+        --timeout=300s
+
     - name: Download KServe Core
       ansible.builtin.get_url:
         url: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve.yaml"
@@ -191,6 +213,12 @@
         kubeconfig: "{{ kubeconfig }}"
         state: present
         src: /tmp/kserve.yaml
+
+    - name: Wait KServe controller ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=ready pod \
+        -l control-plane=kserve-controller-manager \
+        -n kserve --timeout=300s
 
     - name: Install Prometheus & Grafana
       kubernetes.core.helm:
