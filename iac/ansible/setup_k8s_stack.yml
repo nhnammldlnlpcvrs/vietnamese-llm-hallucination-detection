@@ -274,8 +274,16 @@
 
     - name: Wait Prometheus Ready
       ansible.builtin.shell: |
-        kubectl rollout status deployment monitoring-kube-prometheus-sta-prometheus \
+        kubectl rollout status statefulset \
+        monitoring-kube-prometheus-stack-prometheus \
         -n observability --timeout=600s
+      ignore_errors: true
+  
+    - name: Cleanup old Grafana pods if stuck
+      ansible.builtin.shell: |
+        kubectl delete pod -n observability \
+        -l app.kubernetes.io/name=grafana \
+        --ignore-not-found
       ignore_errors: true
 
     - name: Wait Grafana Ready
@@ -314,10 +322,16 @@
         atomic: false
         values:
           backendStore:
-            postgres:
-              enabled: false
-          persistence:
-            enabled: true
-            size: 5Gi
+            sqlite:
+              enabled: true
+
+          artifactStore:
+            local:
+              enabled: true
+              path: /mlruns
+              persistence:
+                enabled: true
+                size: 5Gi
+
           service:
             type: ClusterIP
