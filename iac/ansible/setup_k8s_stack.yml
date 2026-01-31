@@ -228,15 +228,46 @@
         -l control-plane=kserve-controller-manager \
         -n kserve --timeout=300s
 
-    - name: Install Prometheus & Grafana
+        - name: Install Prometheus, Grafana
       kubernetes.core.helm:
         kubeconfig: "{{ kubeconfig }}"
         name: monitoring
         chart_ref: prometheus-community/kube-prometheus-stack
         release_namespace: observability
+        create_namespace: true
         wait: true
-        timeout: 600s
-        atomic: true
+        timeout: 1200s
+        atomic: false
+        values:
+          prometheus:
+            prometheusSpec:
+              retention: 2d
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 512Mi
+                limits:
+                  cpu: 500m
+                  memory: 1Gi
+
+          grafana:
+            enabled: true
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+
+          alertmanager:
+            enabled: false
+
+          nodeExporter:
+            enabled: false
+
+          kubeStateMetrics:
+            enabled: true
 
     - name: Install Loki
       kubernetes.core.helm:
