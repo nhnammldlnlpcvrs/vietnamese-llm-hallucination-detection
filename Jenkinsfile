@@ -15,7 +15,7 @@ pipeline {
         HELM_RELEASE    = 'hallucination-app'
         HELM_CHART_PATH = './kubernetes/charts/hallucination-backend'
 
-        MLFLOW_TRACKING_URI = 'http://172.17.0.1:5000'
+        MLFLOW_TRACKING_URI = 'http://mlflow.mlflow.svc.cluster.local:80'
         MODEL_NAME          = 'hallu-model'
         MODEL_STAGE         = 'Production'
     }
@@ -86,30 +86,33 @@ pipeline {
 
         stage('Download Model Artifacts (MLflow)') {
             steps {
-                script {
-                    sh '''
-                    echo "Downloading model from MLflow..."
+                retry(3) {
+                    timeout(time: 5, unit: 'MINUTES') {
+                        sh '''
+                        echo "Downloading model from MLflow..."
 
-                    rm -rf models/phobert_finetuned_model
-                    mkdir -p models
+                        rm -rf models/phobert_finetuned_model
+                        mkdir -p models
 
-                    docker run --rm \
-                      -e MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI} \
-                      -v $(pwd)/models:/models \
-                      python:3.10-slim \
-                      bash -c "
-                        pip install --no-cache-dir mlflow && \
-                        python -m mlflow artifacts download \
-                          --artifact-uri models:/${MODEL_NAME}/${MODEL_STAGE} \
-                          --dst-path /models/phobert_finetuned_model
-                      "
+                        docker run --rm \
+                        -e MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI} \
+                        -v $(pwd)/models:/models \
+                        python:3.10-slim \
+                        bash -c "
+                            pip install --no-cache-dir mlflow && \
+                            python -m mlflow artifacts download \
+                            --artifact-uri models:/${MODEL_NAME}/${MODEL_STAGE} \
+                            --dst-path /models/phobert_finetuned_model
+                        "
 
-                    test -f models/phobert_finetuned_model/config.json
-                    echo 'Model download OK'
-                    '''
+                        test -f models/phobert_finetuned_model/config.json
+                        echo 'Model download OK'
+                        '''
+                    }
                 }
             }
         }
+
 
         stage('Build & Push Docker Image') {
             steps {
