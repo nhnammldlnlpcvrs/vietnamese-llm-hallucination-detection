@@ -74,7 +74,7 @@ pipeline {
 
                             ansible-playbook \
                             -i inventory.ini \
-                            setup_k8s_stack.yml \
+                            setup_k8s_stack.yaml \
                             --private-key=$SSH_KEY \
                             --extra-vars "ansible_python_interpreter=/usr/bin/python3 kubeconfig_path=$KUBECONFIG"
                             '''
