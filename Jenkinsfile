@@ -44,47 +44,45 @@ pipeline {
             }
         }
 
-       stage('Provision Infra (IaC)') {    
+       stage('Provision Infra (IaC)') {
             steps {
                 withCredentials([
-                    sshUserPrivateKey(credentialsId: "${SSH_KEY_ID}", keyFileVariable: 'SSH_KEY'),
-                    file(credentialsId: "${KUBE_ID}", variable: 'KUBECONFIG_FILE')
+                    sshUserPrivateKey(credentialsId: SSH_KEY_ID, keyFileVariable: 'SSH_KEY'),
+                    file(credentialsId: KUBE_ID, variable: 'KUBECONFIG')
                 ]) {
-                    script {
-                        withEnv([
-                            "KUBECONFIG=${KUBECONFIG_FILE}",
-                            "TF_VAR_kube_config=${KUBECONFIG_FILE}", 
-                            "ANSIBLE_K8S_AUTH_KUBECONFIG=${KUBECONFIG_FILE}"
-                        ]) {
+                    withEnv([
+                        "ANSIBLE_K8S_AUTH_KUBECONFIG=$KUBECONFIG",
+                        "TF_VAR_kube_config=$KUBECONFIG"
+                    ]) {
 
-                            echo "Verify Connection"
-                            sh "kubectl cluster-info"
+                        sh "kubectl cluster-info"
 
-                            echo "Running Terraform"
-                            dir('iac/terraform') {
-                                sh "terraform init"
-                                sh "terraform apply -auto-approve -refresh=true"
-                            }
+                        dir('iac/terraform') {
+                            sh '''
+                            terraform init
+                            terraform apply -auto-approve
+                            '''
+                        }
 
-                            echo "Running Ansible Stack"
-                            dir('iac/ansible') {
-                                sh """
-                                ansible-galaxy collection install kubernetes.core
-                                export ANSIBLE_HOST_KEY_CHECKING=False
+                        dir('iac/ansible') {
+                            sh '''
+                            pwd
+                            ls -la
 
-                                ansible-playbook \
-                                -i inventory.ini \
-                                setup_k8s_stack.yml \
-                                --private-key=${SSH_KEY} \
-                                --extra-vars "ansible_python_interpreter=/usr/bin/python3 kubeconfig_path=${KUBECONFIG_FILE}"
-                                """
-                            }
+                            ansible-galaxy collection install kubernetes.core
+                            export ANSIBLE_HOST_KEY_CHECKING=False
+
+                            ansible-playbook \
+                            -i inventory.ini \
+                            setup_k8s_stack.yml \
+                            --private-key=$SSH_KEY \
+                            --extra-vars "ansible_python_interpreter=/usr/bin/python3 kubeconfig_path=$KUBECONFIG"
+                            '''
                         }
                     }
                 }
             }
         }
-
 
         stage('Download Model Artifacts (MLflow)') {
             steps {
