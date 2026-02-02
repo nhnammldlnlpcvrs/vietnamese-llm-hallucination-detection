@@ -15,7 +15,7 @@ pipeline {
         HELM_RELEASE    = 'hallucination-app'
         HELM_CHART_PATH = './kubernetes/charts/hallucination-backend'
 
-        MLFLOW_TRACKING_URI = 'http://mlflow.mlflow.svc.cluster.local:80'
+        MLFLOW_TRACKING_URI = 'http://localhost:5000'
         MODEL_NAME          = 'hallu-model'
         MODEL_STAGE         = 'Production'
     }
@@ -84,6 +84,20 @@ pipeline {
             }
         }
 
+        stage('Port-forward MLflow') {
+            steps {
+                script {
+                    sh '''
+                    echo "Starting MLflow port-forward..."
+                    kubectl port-forward -n mlflow svc/mlflow 5000:80 >/tmp/mlflow_pf.log 2>&1 &
+                    echo $! > /tmp/mlflow_pf.pid
+                    sleep 10
+                    curl -f http://localhost:5000 || (echo "MLflow not reachable" && exit 1)
+                    '''
+                }
+            }
+        }
+        
         stage('Download Model Artifacts (MLflow)') {
             steps {
                 retry(3) {
@@ -95,9 +109,10 @@ pipeline {
                         mkdir -p models
 
                         docker run --rm \
-                        -e MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI} \
-                        -v $(pwd)/models:/models \
-                        python:3.10-slim \
+                        + --network host \
+                          -e MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI} \
+                          -v $(pwd)/models:/models \
+                          python:3.10-slim \
                         bash -c "
                             pip install --no-cache-dir mlflow && \
                             python -m mlflow artifacts download \
@@ -165,6 +180,12 @@ pipeline {
             echo "Pipeline failed!"
         }
         always {
+            sh '''
+            if [ -f /tmp/mlflow_pf.pid ]; then
+              kill $(cat /tmp/mlflow_pf.pid) || true
+              rm -f /tmp/mlflow_pf.pid
+            fi
+            '''
             cleanWs()
         }
     }
