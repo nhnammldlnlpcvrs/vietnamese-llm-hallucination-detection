@@ -1,4 +1,4 @@
-# mlflow/Dockerfile
+# mlops/mlflow/Dockerfile
 FROM python:3.9-slim-bookworm
 RUN pip install mlflow boto3 psycopg2-binary
 EXPOSE 5000

@@ -83,51 +83,43 @@ pipeline {
                 }
             }
         }
-
-        stage('Port-forward MLflow') {
-            steps {
-                script {
-                    sh '''
-                    echo "Starting MLflow port-forward..."
-                    kubectl port-forward -n mlflow svc/mlflow 5000:80 >/tmp/mlflow_pf.log 2>&1 &
-                    echo $! > /tmp/mlflow_pf.pid
-                    sleep 10
-                    curl -f http://localhost:5000 || (echo "MLflow not reachable" && exit 1)
-                    '''
-                }
-            }
-        }
         
         stage('Download Model Artifacts (MLflow)') {
             steps {
                 retry(3) {
                     timeout(time: 5, unit: 'MINUTES') {
                         sh '''
-                        echo "Downloading model from MLflow..."
+                        echo "Downloading model artifacts from MLflow Registry"
 
-                        rm -rf models/phobert_finetuned_model
+                        python -m venv .venv_mlflow
+                        . .venv_mlflow/bin/activate
+
+                        pip install --no-cache-dir mlflow boto3 psycopg2-binary
+
+                        rm -rf models
                         mkdir -p models
 
-                        docker run --rm \
-                        + --network host \
-                          -e MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI} \
-                          -v $(pwd)/models:/models \
-                          python:3.10-slim \
-                        bash -c "
-                            pip install --no-cache-dir mlflow && \
-                            python -m mlflow artifacts download \
-                            --artifact-uri models:/${MODEL_NAME}/${MODEL_STAGE} \
-                            --dst-path /models/phobert_finetuned_model
-                        "
+                        export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
 
-                        test -f models/phobert_finetuned_model/config.json
-                        echo 'Model download OK'
+                        # Download full model version from registry
+                        mlflow artifacts download \
+                        --artifact-uri models:/${MODEL_NAME}/${MODEL_STAGE} \
+                        --dst-path models
+
+                        echo "Downloaded artifacts:"
+                        find models -maxdepth 3 -type f
+
+                        # Validate expected artifacts
+                        test -d models/models/phobert
+                        test -d models/models/lgbm
+                        test -f models/models/metadata.yaml
+
+                        echo "MLflow model artifacts OK"
                         '''
                     }
                 }
             }
         }
-
 
         stage('Build & Push Docker Image') {
             steps {
