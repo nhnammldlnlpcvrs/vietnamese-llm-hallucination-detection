@@ -23,6 +23,8 @@
         - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
         - { name: "community-charts", url: "https://community-charts.github.io/helm-charts" }
         - { name: "jetstack", url: "https://charts.jetstack.io" }
+      failed_when: false
+      register: helm_repo_results
 
     - name: Update Helm repositories
       ansible.builtin.command: helm repo update
