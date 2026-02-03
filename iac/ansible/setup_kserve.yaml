@@ -1,0 +1,27 @@
+# iac/ansible/setup_kserve.yml
+---
+- name: Install KServe and Dependencies
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Install Istio Base
+      shell: |
+        helm repo add istio https://istio-release.storage.googleapis.com/charts
+        helm repo update
+        helm upgrade --install istio-base istio/base -n istio-system --create-namespace --wait
+
+    - name: Install Istiod (Control Plane)
+      shell: |
+        helm upgrade --install istiod istio/istiod -n istio-system --wait
+
+    - name: Install Knative Serving CRDs
+      shell: |
+        kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.10.0/serving-crds.yaml
+
+    - name: Install Knative Serving Core
+      shell: |
+        kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.10.0/serving-core.yaml
+
+    - name: Install KServe Core
+      shell: |
+        kubectl apply -f https://github.com/kserve/kserve/releases/download/v0.11.0/kserve-install.yaml

@@ -1,4 +1,24 @@
-models/
-result/
-.env
+# Ignore Python bytecode files
+*.pyc
+*.pyo
+*.pyd
 __pycache__/
+
+# Ignore virtual environment directories
+venv/
+env/
+.env
+.venv/
+.vscode/
+
+# Ignore Model and result directories 
+models/phobert_finetuned_model/
+result/
+
+# ignore raw data files
+data/**/*.csv
+data/**/*.json
+data/**/*.parquet
+
+# BUT keep DVC metadata
+!data/**/*.dvc

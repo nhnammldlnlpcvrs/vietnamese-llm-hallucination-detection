@@ -1,0 +1,23 @@
+# kubernetes/values/backend-prod.yaml
+replicaCount: 3
+
+ingress:
+  enabled: true
+  hosts:
+    - host: api.hallucination.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10

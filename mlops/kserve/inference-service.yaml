@@ -1,0 +1,26 @@
+# mlops/kserve/inference-service.yaml
+apiVersion: "serving.kserve.io/v1beta1"
+kind: "InferenceService"
+metadata:
+  name: "hallucination-detector"
+  namespace: "hallucination-prod"
+spec:
+  predictor:
+    containers:
+      - name: kserve-container
+        image: "nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection:latest"
+        command: ["/bin/sh", "-c"]
+        args: ["uvicorn backend.main:app --host 0.0.0.0 --port 8080"] 
+        resources:
+          limits:
+            cpu: "2"
+            memory: "8Gi"
+          requests:
+            cpu: "1"
+            memory: "6Gi"
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 60 
+          periodSeconds: 30
+          failureThreshold: 10

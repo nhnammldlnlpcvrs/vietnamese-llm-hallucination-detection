@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/community-charts/mlflow/main/charts/mlflow/values.schema.json
+replicaCount: 1
+
+backendStore:
+  defaultSqlitePath: "/mlflow/mlflow.db"
+
+artifactRoot:
+  defaultArtifactRoot: "/mlflow/mlruns"
+
+extraVolumes:
+  - name: mlflow-data
+    emptyDir: {}
+
+extraVolumeMounts:
+  - name: mlflow-data
+    mountPath: /mlflow

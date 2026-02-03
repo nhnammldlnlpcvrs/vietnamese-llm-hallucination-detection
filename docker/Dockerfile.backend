@@ -1,0 +1,29 @@
+# docker/Dockerfile.backend
+FROM python:3.10-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV HF_HOME=/app/.hf_cache
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    git curl libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-serving.txt .
+
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir bitsandbytes accelerate && \
+    pip install --no-cache-dir kserve==0.11.2 && \
+    pip install --no-cache-dir -r requirements-serving.txt
+
+COPY backend backend
+
+RUN mkdir -p models
+COPY models/lgbm_final_fold_*.txt models/
+COPY models/phobert_finetuned_model models/phobert_finetuned_model
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8080"]

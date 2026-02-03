@@ -1,0 +1,333 @@
+# iac/ansible/setup_k8s_stack.yml
+---
+- name: Provision MLOps & Observability Stack
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    kubeconfig: "{{ kubeconfig_path | default('~/.kube/config') }}"
+    kserve_version: "v0.14.1"
+    istio_namespace: istio-system
+
+  tasks:
+    - name: Add Helm Repositories
+      kubernetes.core.helm_repository:
+        name: "{{ item.name }}"
+        repo_url: "{{ item.url }}"
+        state: present
+        force_update: true
+      loop:
+        - { name: "istio", url: "https://istio-release.storage.googleapis.com/charts" }
+        - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
+        - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
+        - { name: "community-charts", url: "https://community-charts.github.io/helm-charts" }
+        - { name: "jetstack", url: "https://charts.jetstack.io" }
+      failed_when: false
+      register: helm_repo_results
+
+    - name: Update Helm repositories
+      ansible.builtin.command: helm repo update
+      register: helm_update
+      retries: 3
+      delay: 5
+      until: helm_update.rc == 0
+      changed_when: false
+
+    - name: Create Namespaces
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        api_version: v1
+        kind: Namespace
+        name: "{{ item }}"
+        state: present
+      loop:
+        - observability
+        - kserve
+        - mlflow
+        - "{{ istio_namespace }}"
+
+    - name: Delete cert-manager namespace if exists
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        api_version: v1
+        kind: Namespace
+        name: cert-manager
+        state: absent
+      ignore_errors: true
+
+    - name: Wait cert-manager namespace gone
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig }}"
+        api_version: v1
+        kind: Namespace
+        name: cert-manager
+      register: ns_info
+      until: ns_info.resources | length == 0
+      retries: 20
+      delay: 3
+
+    - name: Recreate cert-manager namespace
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        api_version: v1
+        kind: Namespace
+        name: cert-manager
+        state: present
+
+    - name: Clean cert-manager CRDs
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: absent
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: "{{ item }}"
+      loop:
+        - certificates.cert-manager.io
+        - certificaterequests.cert-manager.io
+        - challenges.acme.cert-manager.io
+        - clusterissuers.cert-manager.io
+        - issuers.cert-manager.io
+        - orders.acme.cert-manager.io
+      ignore_errors: true
+
+    - name: Force delete cert-manager ClusterRoles
+      ansible.builtin.shell: |
+        kubectl get clusterrole -o name | grep cert-manager | xargs -r kubectl delete
+      ignore_errors: true
+
+    - name: Force delete cert-manager ClusterRoleBindings
+      ansible.builtin.shell: |
+        kubectl get clusterrolebinding -o name | grep cert-manager | xargs -r kubectl delete
+      ignore_errors: true
+
+    - name: Force delete cert-manager Webhooks
+      ansible.builtin.shell: |
+        kubectl get mutatingwebhookconfiguration,validatingwebhookconfiguration -o name | grep cert-manager | xargs -r kubectl delete
+      ignore_errors: true
+
+    - name: Force delete cert-manager Roles in kube-system
+      ansible.builtin.shell: |
+        kubectl get role -n kube-system -o name | grep cert-manager | xargs -r kubectl delete -n kube-system
+      ignore_errors: true
+
+    - name: Force delete cert-manager RoleBindings in kube-system
+      ansible.builtin.shell: |
+        kubectl get rolebinding -n kube-system -o name | grep cert-manager | xargs -r kubectl delete -n kube-system
+      ignore_errors: true
+
+
+    - name: Install Cert-Manager
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig }}"
+        name: cert-manager
+        chart_ref: jetstack/cert-manager
+        chart_version: v1.14.5
+        release_namespace: cert-manager
+        create_namespace: true
+        update_repo_cache: true
+        values:
+          installCRDs: true
+        wait: true
+        timeout: 600s
+        atomic: true
+
+    - name: Wait Cert-Manager Pods Ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
+
+    - name: Wait cert-manager webhook ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=available deployment/cert-manager-webhook \
+        -n cert-manager --timeout=300s
+
+    - name: Install Istio Base & Istiod
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig }}"
+        name: "{{ item.name }}"
+        chart_ref: "istio/{{ item.chart }}"
+        release_namespace: "{{ istio_namespace }}"
+        wait: true
+        timeout: 600s
+        atomic: true
+      loop:
+        - { name: istio-base, chart: base }
+        - { name: istiod, chart: istiod }
+
+    - name: Wait Istio Ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=ready pod -l app=istiod -n {{ istio_namespace }} --timeout=300s
+
+    - name: Install Istio Ingress Gateway
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig }}"
+        name: istio-ingressgateway
+        chart_ref: istio/gateway
+        release_namespace: "{{ istio_namespace }}"
+        wait: true
+        timeout: 900s
+        atomic: true
+
+    - name: Wait Istio Ingress Gateway Ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=ready pod \
+        -l app=istio-ingressgateway \
+        -n {{ istio_namespace }} --timeout=300s
+
+
+    - name: Enable Istio injection for kserve namespace
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        kind: Namespace
+        name: kserve
+        definition:
+          metadata:
+            labels:
+              istio-injection: enabled
+
+    - name: Enable Istio Injection Default NS
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        api_version: v1
+        kind: Namespace
+        name: default
+        definition:
+          metadata:
+            labels:
+              istio-injection: enabled
+
+    - name: Download KServe Cluster Resources
+      ansible.builtin.get_url:
+        url: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve-cluster-resources.yaml"
+        dest: /tmp/kserve-cluster.yaml
+
+    - name: Apply KServe Cluster Resources
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        src: /tmp/kserve-cluster.yaml
+
+    - name: Wait KServe CRDs ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=established crd \
+        inferenceservices.serving.kserve.io \
+        --timeout=300s
+
+    - name: Download KServe Core
+      ansible.builtin.get_url:
+        url: "https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve.yaml"
+        dest: /tmp/kserve.yaml
+
+    - name: Apply KServe Core
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        src: /tmp/kserve.yaml
+
+    - name: Wait KServe controller ready
+      ansible.builtin.shell: |
+        kubectl wait --for=condition=ready pod \
+        -l control-plane=kserve-controller-manager \
+        -n kserve --timeout=300s
+
+    - name: Install Prometheus and Grafana Stack 
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig }}"
+        name: monitoring
+        chart_ref: prometheus-community/kube-prometheus-stack
+        release_namespace: observability
+        create_namespace: true
+        wait: false
+        atomic: false
+        timeout: 1800s
+        values:
+          alertmanager:
+            enabled: false
+
+          nodeExporter:
+            enabled: false
+
+          kubeStateMetrics:
+            enabled: false
+
+          prometheus:
+            enabled: true
+            prometheusSpec:
+              replicas: 1
+              retention: 1d
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 512Mi
+                limits:
+                  cpu: 300m
+                  memory: 1Gi
+
+          grafana:
+            enabled: true
+            adminPassword: admin
+
+            sidecar:
+              dashboards:
+                enabled: false
+              datasources:
+                enabled: false
+
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+
+    - name: Wait Prometheus Ready
+      ansible.builtin.shell: |
+        kubectl get sts -n observability \
+        -l app.kubernetes.io/name=prometheus \
+        -o name | \
+        xargs -r kubectl rollout status -n observability --timeout=600s
+      ignore_errors: true
+  
+    - name: Cleanup old Grafana pods if stuck
+      ansible.builtin.shell: |
+        kubectl delete pod -n observability \
+        -l app.kubernetes.io/name=grafana \
+        --ignore-not-found
+      ignore_errors: true
+
+    - name: Wait Grafana Ready
+      ansible.builtin.shell: |
+        kubectl rollout status deployment monitoring-grafana \
+        -n observability --timeout=600s
+      ignore_errors: true
+
+
+    - name: Install Loki
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig }}"
+        name: loki
+        chart_ref: grafana/loki-stack
+        release_namespace: observability
+        wait: false
+        timeout: 600s
+        values:
+          loki:
+            enabled: true
+            resources:
+              requests:
+                cpu: 50m
+                memory: 256Mi
+          promtail:
+            enabled: false
+
+    - name: Install MLflow
+      kubernetes.core.helm:
+        name: mlflow
+        chart_ref: community-charts/mlflow
+        release_namespace: mlflow
+        create_namespace: true
+        wait: true
+        timeout: 600s
+        values: "{{ lookup('file', 'values-mlflow.yaml') | from_yaml }}"
+
