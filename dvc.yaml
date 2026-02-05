@@ -1,13 +1,16 @@
 stages:
+  embed:
+    cmd: python notebooks/embed_phobert.py
+    deps:
+      - notebooks/embed_phobert.py
+      - data/vihallu-dataset/vihallu-train.csv
+    outs:
+      - features/phobert_embeddings.npy
+
   train:
     cmd: python notebooks/train-model-vihallu.py
     deps:
       - notebooks/train-model-vihallu.py
+      - features/phobert_embeddings.npy
       - data/vihallu-dataset/vihallu-train.csv
       - data/vihallu-vistral-dataset/vistral_train_predictions_with_probs.csv
-    outs:
-      - models/phobert/
-      - models/phobert_tokenizer/
-      - models/lgbm/
-      - models/metadata.yaml
-      - models/feature_schema.json

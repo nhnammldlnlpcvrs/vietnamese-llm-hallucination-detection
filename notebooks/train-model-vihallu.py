@@ -12,6 +12,9 @@ from transformers import AutoTokenizer, AutoModel
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import f1_score
 
+os.environ["TORCH_DISABLE_DYNAMO"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 EXPERIMENT_NAME = "vihallu-pipeline"
 PHOBERT_MODEL = "vinai/phobert-base"
 
@@ -60,20 +63,24 @@ def simple_feats(text):
         len(text.split())
     ]
 
-def extract_embeddings(texts, tokenizer, model):
-    inputs = tokenizer(
-        texts,
-        padding=True,
-        truncation=True,
-        max_length=256,
-        return_tensors="pt"
-    ).to(DEVICE)
-
-    with torch.no_grad():
-        outputs = model(**inputs)
-        emb = outputs.last_hidden_state.mean(dim=1)
-
-    return emb.cpu().numpy()
+def extract_embeddings(texts, tokenizer, model, batch_size=8):
+    all_embs = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i+batch_size]
+        inputs = tokenizer(
+            batch,
+            padding=True,
+            truncation=True,
+            max_length=256,
+            return_tensors="pt"
+        )
+        with torch.no_grad():
+            out = model(**inputs)
+            emb = out.last_hidden_state.mean(dim=1)
+        all_embs.append(emb.cpu().numpy())
+        del inputs, out, emb
+        torch.cuda.empty_cache()
+    return np.vstack(all_embs)
 
 def main():
     mlflow.set_experiment(EXPERIMENT_NAME)
