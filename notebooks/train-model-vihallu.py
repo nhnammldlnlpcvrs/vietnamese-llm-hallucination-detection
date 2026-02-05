@@ -1,45 +1,64 @@
-# notebooks/train-model-vihallu.py
 import os
 import json
 import yaml
+import subprocess
 import mlflow
-import mlflow.pytorch
 import lightgbm as lgb
 import numpy as np
 import torch
+import pandas as pd
 
-from transformers import (
-    AutoTokenizer,
-    AutoModel,
-)
+from transformers import AutoTokenizer, AutoModel
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import f1_score
 
 EXPERIMENT_NAME = "vihallu-pipeline"
 PHOBERT_MODEL = "vinai/phobert-base"
-NLI_MODEL = "MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli"
-NER_MODEL = "undertheseanlp/vietnamese-ner-v1.4.0a2"
-VISTRAL_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 
 NUM_FOLDS = 5
 DEVICE = "cpu"
+RANDOM_STATE = 42
+
+LABEL_MAP = {
+    "extrinsic": 0,
+    "no": 1,
+    "intrinsic": 2
+}
+
+def get_git_commit():
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"]
+        ).decode().strip()
+    except Exception:
+        return "unknown"
 
 def load_dataset():
-    """
-    RETURN:
-        contexts: List[str]
-        prompts:  List[str]
-        responses: List[str]
-        labels: np.array shape (N,) with values {0,1,2}
-    """
-    raise NotImplementedError("Load your hallucination dataset here")
+    path = "data/vihallu-dataset/vihallu-train.csv"
+    if not os.path.exists(path):
+        raise FileNotFoundError(path)
 
-def simple_feats(context, prompt, response):
-    feats = []
-    for t in [context, prompt, response]:
-        s = t or ""
-        feats.extend([len(s), len(s.split())])
-    return feats
+    df = pd.read_csv(path)
+
+    df["label"] = df["label"].astype(str).str.lower().str.strip()
+    if set(df["label"]) - LABEL_MAP.keys():
+        raise ValueError("Unknown labels detected")
+
+    labels = df["label"].map(LABEL_MAP).values
+
+    texts = (
+        df["context"].fillna("") + " " +
+        df["prompt"].fillna("") + " " +
+        df["response"].fillna("")
+    ).astype(str).tolist()
+
+    return texts, labels
+
+def simple_feats(text):
+    return [
+        len(text),
+        len(text.split())
+    ]
 
 def extract_embeddings(texts, tokenizer, model):
     inputs = tokenizer(
@@ -51,110 +70,102 @@ def extract_embeddings(texts, tokenizer, model):
     ).to(DEVICE)
 
     with torch.no_grad():
-        out = model(**inputs)
-        emb = out.last_hidden_state.mean(dim=1)
+        outputs = model(**inputs)
+        emb = outputs.last_hidden_state.mean(dim=1)
+
     return emb.cpu().numpy()
 
 def main():
     mlflow.set_experiment(EXPERIMENT_NAME)
 
-    contexts, prompts, responses, labels = load_dataset()
+    texts, y = load_dataset()
 
     tokenizer = AutoTokenizer.from_pretrained(PHOBERT_MODEL)
     model = AutoModel.from_pretrained(PHOBERT_MODEL).to(DEVICE).eval()
 
-    with mlflow.start_run(run_name="vihallu-full-pipeline"):
+    with mlflow.start_run(run_name="vihallu-train"):
 
         mlflow.log_params({
             "phobert_model": PHOBERT_MODEL,
-            "nli_model": NLI_MODEL,
-            "ner_model": NER_MODEL,
-            "vistral_model": VISTRAL_MODEL,
-            "num_folds": NUM_FOLDS
+            "num_folds": NUM_FOLDS,
+            "device": DEVICE,
+            "git_commit": get_git_commit()
         })
 
-        X_embed = extract_embeddings(
-            [f"{c} {p} {r}" for c, p, r in zip(contexts, prompts, responses)],
-            tokenizer,
-            model
+        X_embed = extract_embeddings(texts, tokenizer, model)
+        X_simple = np.array([simple_feats(t) for t in texts])
+        X = np.hstack([X_embed, X_simple])
+
+        skf = StratifiedKFold(
+            n_splits=NUM_FOLDS,
+            shuffle=True,
+            random_state=RANDOM_STATE
         )
 
-        X_simple = np.array([
-            simple_feats(c, p, r)
-            for c, p, r in zip(contexts, prompts, responses)
-        ])
-
-        X = np.hstack([X_embed, X_simple])
-        y = labels
-
-        skf = StratifiedKFold(n_splits=NUM_FOLDS, shuffle=True, random_state=42)
+        os.makedirs("models/lgbm", exist_ok=True)
         oof_preds = np.zeros((len(y), 3))
 
-        os.makedirs("lgbm_models", exist_ok=True)
-
         for fold, (tr, va) in enumerate(skf.split(X, y)):
-            clf = lgb.LGBMClassifier(
-                objective="multiclass",
-                num_class=3,
-                num_leaves=64,
-                learning_rate=0.05,
-                n_estimators=300
-            )
+            with mlflow.start_run(
+                run_name=f"lgbm_fold_{fold}",
+                nested=True
+            ):
+                clf = lgb.LGBMClassifier(
+                    objective="multiclass",
+                    num_class=3,
+                    num_leaves=64,
+                    learning_rate=0.05,
+                    n_estimators=300
+                )
 
-            clf.fit(X[tr], y[tr])
-            preds = clf.predict_proba(X[va])
-            oof_preds[va] = preds
+                clf.fit(X[tr], y[tr])
+                preds = clf.predict_proba(X[va])
+                oof_preds[va] = preds
 
-            model_path = f"lgbm_models/fold_{fold}.txt"
-            clf.booster_.save_model(model_path)
-            mlflow.log_artifact(model_path, artifact_path="models/lgbm")
+                fold_f1 = f1_score(
+                    y[va],
+                    np.argmax(preds, axis=1),
+                    average="macro"
+                )
 
-        f1 = f1_score(y, np.argmax(oof_preds, axis=1), average="macro")
-        mlflow.log_metric("lgbm_oof_macro_f1", f1)
+                mlflow.log_metric("val_macro_f1", fold_f1)
 
-        mlflow.pytorch.log_model(model, artifact_path="models/phobert")
-        tokenizer.save_pretrained("phobert_tokenizer")
-        mlflow.log_artifacts("phobert_tokenizer", artifact_path="models/phobert_tokenizer")
+                model_path = f"models/lgbm/fold_{fold}.txt"
+                clf.booster_.save_model(model_path)
+
+        oof_f1 = f1_score(
+            y,
+            np.argmax(oof_preds, axis=1),
+            average="macro"
+        )
+        mlflow.log_metric("oof_macro_f1", oof_f1)
+
+        os.makedirs("models/phobert", exist_ok=True)
+        os.makedirs("models/phobert_tokenizer", exist_ok=True)
+
+        model.save_pretrained("models/phobert")
+        tokenizer.save_pretrained("models/phobert_tokenizer")
 
         metadata = {
-            "nli_model": NLI_MODEL,
-            "ner_model": NER_MODEL,
-            "vistral_model": VISTRAL_MODEL,
-            "label_map": {
-                "0": "Extrinsic",
-                "1": "No",
-                "2": "Intrinsic"
-            }
+            "label_map": LABEL_MAP,
+            "embedding_model": PHOBERT_MODEL
         }
 
-        with open("metadata.yaml", "w") as f:
+        with open("models/metadata.yaml", "w") as f:
             yaml.dump(metadata, f)
-
-        mlflow.log_artifact("metadata.yaml", artifact_path="models")
 
         feature_schema = {
             "features": [
                 "phobert_embedding[768]",
-                "context_len",
-                "context_words",
-                "prompt_len",
-                "prompt_words",
-                "response_len",
-                "response_words"
+                "text_length",
+                "text_word_count"
             ]
         }
 
-        with open("feature_schema.json", "w") as f:
+        with open("models/feature_schema.json", "w") as f:
             json.dump(feature_schema, f, indent=2)
 
-        mlflow.log_artifact("feature_schema.json")
-
-        mlflow.log_artifact(
-            "backend/model/inference_model.py",
-            artifact_path="inference"
-        )
-
-        print("Training & MLflow logging completed")
+        print("Training completed successfully")
 
 if __name__ == "__main__":
     main()

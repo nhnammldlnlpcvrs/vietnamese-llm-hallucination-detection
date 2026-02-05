@@ -1,0 +1,6 @@
+[core]
+    remote = storage
+['remote "storage"']
+    url = s3://vihallu-dvc
+    endpointurl = http://localhost:9000
+    use_ssl = false

@@ -6,9 +6,8 @@ stages:
       - data/vihallu-dataset/vihallu-train.csv
       - data/vihallu-vistral-dataset/vistral_train_predictions_with_probs.csv
     outs:
-      - models/phobert_finetuned_model
-      - models/lgbm_final_fold_0.txt
-      - models/lgbm_final_fold_1.txt
-      - models/lgbm_final_fold_2.txt
-      - models/lgbm_final_fold_3.txt
-      - models/lgbm_final_fold_4.txt
+      - models/phobert/
+      - models/phobert_tokenizer/
+      - models/lgbm/
+      - models/metadata.yaml
+      - models/feature_schema.json
