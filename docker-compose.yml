@@ -35,7 +35,13 @@ services:
         condition: service_healthy
     environment:
       - BACKEND_STORE_URI=postgresql://user:password@db:5432/mlflow
-      - ARTIFACT_ROOT=/mlflow/artifacts
+      - DB_USER=user
+      - DB_PASS=password
+      - DB_HOST=db
+      - S3_BUCKET=vihallu-mlflow
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     command: >
       mlflow server
       --backend-store-uri postgresql://user:password@db:5432/mlflow
@@ -53,6 +59,8 @@ services:
     environment:
       MODEL_PATH: /app/models/phobert_finetuned_model
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_MODEL_NAME: vihallu-lgbm
+      MLFLOW_MODEL_STAGE: Production
     ports:
       - "8000:8000"
     volumes:
