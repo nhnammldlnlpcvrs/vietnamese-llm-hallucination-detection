@@ -34,14 +34,14 @@ stages:
       size: 21504128
     - path: notebooks/train-model-vihallu.py
       hash: md5
-      md5: 11050a3015204504fe964935b74e6589
-      size: 5286
+      md5: b0d1fb1214304039ae8014a8d4805286
+      size: 5406
     outs:
     - path: models/feature_schema.json
       hash: md5
       md5: e59f1b1aaaa0b1aa7c37caf636b0846d
       size: 372
-    - path: models/lgbm/
+    - path: models/lgbm
       hash: md5
       md5: b02965e01e8906e10a943d609fc454b9.dir
       size: 32921564
@@ -50,7 +50,33 @@ stages:
       hash: md5
       md5: bc084f7f48182d1869a7428d86fc4831
       size: 277
-    - path: models/metrics.json
+  infer:
+    cmd: python notebooks/infer-model-vihallu.py
+    deps:
+    - path: 
+        data/vihallu-vistral-dataset/vistral_train_predictions_with_probs.csv
       hash: md5
-      md5: c97cf48de83cf0c97cb4a805e3038062
-      size: 102
+      md5: be999df9d039824af3f5d264f020b6b2
+      size: 550556
+    - path: features/phobert_embeddings.npy
+      hash: md5
+      md5: d060d969d9da4e05c4dfe16d0137396a
+      size: 21504128
+    - path: models/feature_schema.json
+      hash: md5
+      md5: e59f1b1aaaa0b1aa7c37caf636b0846d
+      size: 372
+    - path: models/lgbm
+      hash: md5
+      md5: b02965e01e8906e10a943d609fc454b9.dir
+      size: 32921564
+      nfiles: 5
+    - path: notebooks/infer-model-vihallu.py
+      hash: md5
+      md5: f7558a30b763d11a03c2c05210615209
+      size: 2716
+    outs:
+    - path: predictions/vihallu_infer_predictions.csv
+      hash: md5
+      md5: 46309db27b28784760866d08810932ea
+      size: 754645
