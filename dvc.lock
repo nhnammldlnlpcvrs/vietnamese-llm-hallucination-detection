@@ -34,8 +34,8 @@ stages:
       size: 21504128
     - path: notebooks/train-model-vihallu.py
       hash: md5
-      md5: b0d1fb1214304039ae8014a8d4805286
-      size: 5406
+      md5: 0286c34ad2a30cb4c7f979b8b16e1f50
+      size: 6564
     outs:
     - path: models/feature_schema.json
       hash: md5
