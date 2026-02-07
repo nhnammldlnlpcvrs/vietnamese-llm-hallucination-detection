@@ -25,3 +25,10 @@ data/**/*.parquet
 # BUT keep DVC metadata
 !data/**/*.dvc
 mlruns/
+
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
