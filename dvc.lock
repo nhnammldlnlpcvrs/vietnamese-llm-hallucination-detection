@@ -80,3 +80,10 @@ stages:
       hash: md5
       md5: 46309db27b28784760866d08810932ea
       size: 754645
+  promote:
+    cmd: python scripts/auto_promote.py
+    deps:
+    - path: scripts/auto_promote.py
+      hash: md5
+      md5: 25fdc4b050db862ec47354edec0c94cb
+      size: 999

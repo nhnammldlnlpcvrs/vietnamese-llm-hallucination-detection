@@ -1,0 +1,9 @@
+# kubernetes/values/platform-prod.yaml
+backend:
+  enabled: true
+
+model:
+  enabled: true
+
+runtime:
+  enabled: true

@@ -1,16 +1,14 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/community-charts/mlflow/main/charts/mlflow/values.schema.json
-replicaCount: 1
+# iac/ansible/values-mlflow.yaml
+mlflow:
+  image:
+    repository: ghcr.io/kserve/mlflowserver
+    tag: "0.11.2"
 
-backendStore:
-  defaultSqlitePath: "/mlflow/mlflow.db"
-
-artifactRoot:
-  defaultArtifactRoot: "/mlflow/mlruns"
-
-extraVolumes:
-  - name: mlflow-data
-    emptyDir: {}
-
-extraVolumeMounts:
-  - name: mlflow-data
-    mountPath: /mlflow
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"

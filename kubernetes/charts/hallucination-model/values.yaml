@@ -1,0 +1,15 @@
+# kubernetes/charts/hallucination-model/values.yaml
+model:
+  name: hallucination-detector
+  namespace: hallucination-prod
+
+mlflow:
+  storageUri: s3://mlflow-artifacts/vihallu/Production
+
+resources:
+  requests:
+    cpu: "2"
+    memory: "8Gi"
+  limits:
+    cpu: "4"
+    memory: "12Gi"

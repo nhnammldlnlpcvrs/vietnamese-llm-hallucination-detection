@@ -29,3 +29,9 @@ stages:
       - models/feature_schema.json
     outs:
       - predictions/vihallu_infer_predictions.csv
+
+  promote:
+    cmd: python scripts/auto_promote_registry.py
+    deps:
+      - scripts/auto_promote_registry.py
+    always_changed: true

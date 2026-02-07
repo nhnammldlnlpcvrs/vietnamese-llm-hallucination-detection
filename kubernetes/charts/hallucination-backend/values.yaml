@@ -1,42 +1,38 @@
 # kubernetes/charts/hallucination-backend/values.yaml
+replicaCount: 2
+
 image:
-  repository: nhnammldlnlpcvrs/vietnamese-llm-hallucination-detection
-  tag: "latest"
+  repository: ghcr.io/nhnammldlnlpcvrs/hallucination-backend
+  tag: "2026.02.06"
   pullPolicy: IfNotPresent
 
 service:
-  type: NodePort
+  type: ClusterIP
   port: 8000
-  nodePort: 30005
-
-ingress:
-  enabled: false
-
-model:
-  enabled: "true"
-  name: "phobert-hallucination"
-  path: "vinai/phobert-base"
-
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 1
 
 resources:
-  limits:
-    memory: "8Gi"
-    cpu: "4"
   requests:
-    memory: "4Gi"
-    cpu: "2"
-
-env:
-  DISABLE_MODEL: "false"
+    cpu: "500m"
+    memory: "512Mi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
 
 secrets:
-  hfToken: ""
+  create: false
 
-podAnnotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/path: "/metrics"
-  prometheus.io/port: "8000"
+env:
+  LOG_LEVEL: info
+  KSERVE_MODEL_NAME: hallucination-detector
+  KSERVE_NAMESPACE: hallucination-prod
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts: []
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70

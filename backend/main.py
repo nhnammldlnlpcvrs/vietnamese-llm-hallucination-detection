@@ -37,6 +37,8 @@ provider = TracerProvider(
     sampler=sampler
 )
 
+
+
 if os.getenv("DISABLE_MODEL") == "true":
     processor = BatchSpanProcessor(ConsoleSpanExporter()) 
 else:
@@ -54,7 +56,11 @@ async def log_requests(request: Request, call_next):
     
     current_span = trace.get_current_span()
     span_context = current_span.get_span_context()
-    trace_id = format(span_context.trace_id, '032x') if span_context.is_valid else "0"
+    trace_id = (
+        format(span_context.trace_id, "032x")
+        if span_context and span_context.is_valid
+        else None
+    )
     
     response = await call_next(request)
     

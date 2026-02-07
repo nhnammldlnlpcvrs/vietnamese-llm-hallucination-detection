@@ -1,0 +1,17 @@
+# kubernetes/charts/hallucination-model/templates/inferenceservice.yaml
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: {{ .Values.model.name }}
+  namespace: {{ .Values.model.namespace }}
+  namespace: hallucination-prod
+spec:
+  predictor:
+    model:
+      runtimeName: mlflow-runtime
+      modelFormat:
+        name: mlflow
+      storageUri: {{ .Values.mlflow.storageUri }}
+      resources:
+        {{- toYaml .Values.resources | nindent 8 }}
+

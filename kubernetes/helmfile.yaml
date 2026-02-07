@@ -1,63 +1,11 @@
 # kubernetes/helmfile.yaml
-repositories:
-  - name: prometheus-community
-    url: https://prometheus-community.github.io/helm-charts
-  - name: ingress-nginx
-    url: https://kubernetes.github.io/ingress-nginx
-  - name: grafana
-    url: https://grafana.github.io/helm-charts
-  - name: jaegertracing
-    url: https://jaegertracing.github.io/helm-charts
-
 environments:
-  default:
-    values:
-      - environment: "default"
   prod:
     values:
-      - environment: "prod"
+      - values/platform-prod.yaml
 
-releases:
-  - name: monitoring-stack
-    namespace: monitoring
-    chart: prometheus-community/kube-prometheus-stack
-    values:
-      - grafana:
-          sidecar:
-            dashboards:
-              enabled: true
-              label: grafana_dashboard
-              folder: /tmp/dashboards
-          additionalDataSources:
-            - name: Loki
-              type: loki
-              url: http://loki:3100
-            - name: Jaeger
-              type: jaeger
-              url: http://jaeger-query:16686
-
-  - name: loki
-    namespace: monitoring
-    chart: grafana/loki-stack
-    values:
-      - ../observability/loki/loki-values.yaml
-
-  - name: jaeger
-    namespace: monitoring
-    chart: jaegertracing/jaeger
-    values:
-      - ../observability/jaeger/jaeger-values.yaml
-
-  - name: ingress-nginx
-    namespace: ingress-nginx
-    chart: ingress-nginx/ingress-nginx
-
-  - name: hallucination-backend
-    namespace: hallucination-{{ .Values.environment }}
-    chart: ./charts/hallucination-backend
-    values:
-      - ./charts/hallucination-backend/values.yaml
-      - values/backend-{{ .Values.environment }}.yaml
-    set:
-      - name: image.tag
-        value: {{ requiredEnv "TAG" | default "latest" }}
+helmfiles:
+  - path: helmfiles/backend.yaml
+  - path: helmfiles/model.yaml
+  - path: helmfiles/runtime.yaml
+    when: {{ .Environment.Values.runtime.enabled }}

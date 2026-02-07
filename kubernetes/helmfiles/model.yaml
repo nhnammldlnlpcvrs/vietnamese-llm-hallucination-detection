@@ -1,0 +1,8 @@
+# kubernetes/helmfile.d/model.yaml
+releases:
+  - name: hallucination-model
+    namespace: hallucination-prod
+    chart: ../charts/hallucination-model
+    installed: {{ .Environment.Values.model.enabled }}
+    values:
+      - ../values/model-prod.yaml
