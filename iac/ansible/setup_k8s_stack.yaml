@@ -9,6 +9,7 @@
     kubeconfig: "{{ kubeconfig_path | default('~/.kube/config') }}"
     kserve_version: "v0.14.1"
     istio_namespace: istio-system
+    ansible_python_interpreter: /home/nguyen-nam/anaconda3/envs/ai-engineer/bin/python
 
   tasks:
     - name: Add Helm Repositories
