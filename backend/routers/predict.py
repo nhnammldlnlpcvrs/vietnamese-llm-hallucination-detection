@@ -23,11 +23,12 @@ def predict_hallu(data: HalluInput):
             confidence=result["confidence"]
         )
 
-    except Exception:
+    except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail="Internal model error"
-        )
+        status_code=500,
+        detail=str(e)
+    )
+
 
 
 @router.post("/warmup")
