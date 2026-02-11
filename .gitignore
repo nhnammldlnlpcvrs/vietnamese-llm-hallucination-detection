@@ -32,3 +32,5 @@ mlruns/
 *.tfstate
 *.tfstate.*
 crash.log
+*.tfstate*
+.terraform/
