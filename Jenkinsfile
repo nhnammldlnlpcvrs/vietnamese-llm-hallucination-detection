@@ -40,9 +40,8 @@ pipeline {
                 sh '''
                 docker build -f docker/Dockerfile.ci -t hallucination-ci:latest .
                 docker run --rm \
-                  -v $PWD:/app \
-                  hallucination-ci:latest \
-                  pytest --cov=backend --cov-report=xml
+                hallucination-ci:latest \
+                pytest --cov=backend --cov-report=xml
                 '''
             }
         }
