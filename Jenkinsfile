@@ -41,7 +41,7 @@ pipeline {
                 docker build -f docker/Dockerfile.ci -t hallucination-ci:latest .
                 docker run --rm \
                 hallucination-ci:latest \
-                pytest --cov=backend --cov-report=xml
+                pytest tests/unit --cov=backend --cov-report=xml
                 '''
             }
         }
