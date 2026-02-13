@@ -18,6 +18,8 @@ pipeline {
         MLFLOW_TRACKING_URI = 'http://localhost:5000'
         MODEL_NAME          = 'hallu-model'
         MODEL_STAGE         = 'Production'
+
+        COVERAGE_THRESHOLD  = 80
     }
 
     options {
@@ -35,16 +37,34 @@ pipeline {
 
         stage('Unit Test & Coverage') {
             steps {
+                sh '''
+                docker build -f docker/Dockerfile.ci -t hallucination-ci:latest .
+                docker run --rm \
+                  -v $PWD:/app \
+                  hallucination-ci:latest \
+                  pytest --cov=backend --cov-report=xml
+                '''
+            }
+        }
+
+        stage('Check Coverage Threshold') {
+            steps {
                 script {
-                    sh '''
-                    docker build -f docker/Dockerfile.ci -t hallucination-ci:latest .
-                    docker run --rm hallucination-ci:latest
-                    '''
+                    def coverage = sh(
+                        script: "grep -o 'line-rate=\"[0-9.]*\"' coverage.xml | head -1 | cut -d'\"' -f2",
+                        returnStdout: true
+                    ).trim().toFloat() * 100
+
+                    echo "Detected coverage: ${coverage}%"
+
+                    if (coverage < COVERAGE_THRESHOLD.toInteger()) {
+                        error("Coverage below ${COVERAGE_THRESHOLD}% - stopping pipeline")
+                    }
                 }
             }
         }
 
-       stage('Provision Infra (IaC)') {
+        stage('Provision Infra (Terraform + Ansible)') {
             steps {
                 withCredentials([
                     sshUserPrivateKey(credentialsId: SSH_KEY_ID, keyFileVariable: 'SSH_KEY'),
@@ -66,98 +86,95 @@ pipeline {
 
                         dir('iac/ansible') {
                             sh '''
-                            pwd
-                            ls -la
-
                             ansible-galaxy collection install kubernetes.core
                             export ANSIBLE_HOST_KEY_CHECKING=False
 
                             ansible-playbook \
-                            -i inventory.ini \
-                            setup_k8s_stack.yaml \
-                            --private-key=$SSH_KEY \
-                            --extra-vars "ansible_python_interpreter=/usr/bin/python3 kubeconfig_path=$KUBECONFIG"
+                              -i inventory.ini \
+                              setup_k8s_stack.yaml \
+                              --private-key=$SSH_KEY \
+                              --extra-vars "ansible_python_interpreter=/usr/bin/python3 kubeconfig_path=$KUBECONFIG"
                             '''
                         }
                     }
                 }
             }
         }
-        
+
         stage('Download Model Artifacts (MLflow)') {
             steps {
-                retry(3) {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        sh '''
-                        echo "Downloading model artifacts from MLflow Registry"
+                sh '''
+                echo "Downloading model from MLflow..."
 
-                        python -m venv .venv_mlflow
-                        . .venv_mlflow/bin/activate
+                python -m venv .venv_mlflow
+                . .venv_mlflow/bin/activate
 
-                        pip install --no-cache-dir mlflow boto3 psycopg2-binary
+                pip install --no-cache-dir mlflow boto3 psycopg2-binary
 
-                        rm -rf models
-                        mkdir -p models
+                rm -rf models
+                mkdir -p models
 
-                        export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
+                export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
 
-                        # Download full model version from registry
-                        mlflow artifacts download \
-                        --artifact-uri models:/${MODEL_NAME}/${MODEL_STAGE} \
-                        --dst-path models
+                mlflow artifacts download \
+                  --artifact-uri models:/${MODEL_NAME}/${MODEL_STAGE} \
+                  --dst-path models
 
-                        echo "Downloaded artifacts:"
-                        find models -maxdepth 3 -type f
+                echo "Validating artifacts..."
 
-                        # Validate expected artifacts
-                        test -d models/models/phobert
-                        test -d models/models/lgbm
-                        test -f models/models/metadata.yaml
+                test -d models/models/phobert
+                test -d models/models/lgbm
+                test -f models/models/metadata.yaml
 
-                        echo "MLflow model artifacts OK"
-                        '''
-                    }
-                }
+                echo "Model download successful"
+                '''
             }
         }
 
         stage('Build & Push Docker Image') {
             steps {
                 script {
-                    sh "docker build -f docker/Dockerfile.backend -t ${FULL_IMAGE}:${BUILD_NUMBER} ."
+                    sh """
+                    docker build -f docker/Dockerfile.backend \
+                      -t ${FULL_IMAGE}:${BUILD_NUMBER} .
+                    """
 
-                    withDockerRegistry([credentialsId: "${DOCKER_ID}", url: '']) {
-                        sh '''
+                    withDockerRegistry([credentialsId: DOCKER_ID]) {
+                        sh """
                         docker push ${FULL_IMAGE}:${BUILD_NUMBER}
                         docker tag ${FULL_IMAGE}:${BUILD_NUMBER} ${FULL_IMAGE}:latest
                         docker push ${FULL_IMAGE}:latest
-                        '''
+                        """
                     }
                 }
+            }
+        }
+
+        stage('Manual Approval') {
+            steps {
+                input message: "Approve deployment to production?"
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
                 withCredentials([
-                    string(credentialsId: "${HF_TOKEN_ID}", variable: 'HF_TOKEN'),
-                    file(credentialsId: "${KUBE_ID}", variable: 'KUBECONFIG_FILE')
+                    string(credentialsId: HF_TOKEN_ID, variable: 'HF_TOKEN'),
+                    file(credentialsId: KUBE_ID, variable: 'KUBECONFIG_FILE')
                 ]) {
                     withEnv(["KUBECONFIG=${KUBECONFIG_FILE}"]) {
-                        script {
-                            sh '''
-                            helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
-                              --namespace ${K8S_NAMESPACE} \
-                              --create-namespace \
-                              --set image.repository=${FULL_IMAGE} \
-                              --set image.tag=${BUILD_NUMBER} \
-                              --set secrets.hfToken=${HF_TOKEN} \
-                              --wait --timeout 5m
+                        sh """
+                        helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
+                          --namespace ${K8S_NAMESPACE} \
+                          --create-namespace \
+                          --set image.repository=${FULL_IMAGE} \
+                          --set image.tag=${BUILD_NUMBER} \
+                          --set secrets.hfToken=${HF_TOKEN} \
+                          --wait --timeout 5m
 
-                            kubectl rollout status deployment/${HELM_RELEASE} -n ${K8S_NAMESPACE}
-                            kubectl get pods -n ${K8S_NAMESPACE}
-                            '''
-                        }
+                        kubectl rollout status deployment/${HELM_RELEASE} -n ${K8S_NAMESPACE}
+                        kubectl get pods -n ${K8S_NAMESPACE}
+                        """
                     }
                 }
             }
@@ -166,18 +183,12 @@ pipeline {
 
     post {
         success {
-            echo "Deployment successful!"
+            echo "Pipeline completed successfully!"
         }
         failure {
             echo "Pipeline failed!"
         }
         always {
-            sh '''
-            if [ -f /tmp/mlflow_pf.pid ]; then
-              kill $(cat /tmp/mlflow_pf.pid) || true
-              rm -f /tmp/mlflow_pf.pid
-            fi
-            '''
             cleanWs()
         }
     }
