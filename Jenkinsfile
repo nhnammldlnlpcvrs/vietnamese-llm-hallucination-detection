@@ -67,11 +67,18 @@ pipeline {
             steps {
                 withCredentials([
                     sshUserPrivateKey(credentialsId: SSH_KEY_ID, keyFileVariable: 'SSH_KEY'),
-                    file(credentialsId: KUBE_ID, variable: 'KUBECONFIG')
+                    file(credentialsId: KUBE_ID, variable: 'KUBECONFIG'),
+                    usernamePassword(
+                        credentialsId: DOCKER_ID,
+                        usernameVariable: 'GHCR_USERNAME',
+                        passwordVariable: 'GHCR_TOKEN'
+                    )
                 ]) {
                     withEnv([
                         "ANSIBLE_K8S_AUTH_KUBECONFIG=$KUBECONFIG",
-                        "TF_VAR_kube_config=$KUBECONFIG"
+                        "TF_VAR_kube_config=$KUBECONFIG",
+                        "TF_VAR_ghcr_username=$GHCR_USERNAME",
+                        "TF_VAR_ghcr_token=$GHCR_TOKEN"
                     ]) {
 
                         sh "kubectl cluster-info"
@@ -89,16 +96,17 @@ pipeline {
                             export ANSIBLE_HOST_KEY_CHECKING=False
 
                             ansible-playbook \
-                              -i inventory.ini \
-                              setup_k8s_stack.yaml \
-                              --private-key=$SSH_KEY \
-                              --extra-vars "ansible_python_interpreter=/usr/bin/python3 kubeconfig_path=$KUBECONFIG"
+                            -i inventory.ini \
+                            setup_k8s_stack.yaml \
+                            --private-key=$SSH_KEY \
+                            --extra-vars "ansible_python_interpreter=/usr/bin/python3 kubeconfig_path=$KUBECONFIG"
                             '''
                         }
                     }
                 }
             }
         }
+
 
         stage('Download Model Artifacts (MLflow)') {
             steps {
