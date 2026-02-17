@@ -4,8 +4,16 @@ environments:
     values:
       - values/platform-prod.yaml
 
+helmDefaults:
+  wait: true
+  timeout: 600
+  atomic: true
+
 helmfiles:
   - path: helmfiles/backend.yaml
+    values:
+      - values/platform-prod.yaml
+
   - path: helmfiles/model.yaml
-  - path: helmfiles/runtime.yaml
-    when: {{ .Environment.Values.runtime.enabled }}
+    values:
+      - values/platform-prod.yaml

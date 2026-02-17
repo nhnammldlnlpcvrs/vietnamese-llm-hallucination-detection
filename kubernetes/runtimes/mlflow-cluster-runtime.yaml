@@ -4,6 +4,9 @@ kind: ClusterServingRuntime
 metadata:
   name: mlflow-runtime
 spec:
+  imagePullSecrets:
+    - name: ghcr-secret
+
   supportedModelFormats:
     - name: mlflow
       version: "1"
@@ -13,8 +16,8 @@ spec:
     - v2
 
   containers:
-    - name: mlflow
-      image: ghcr.io/kserve/mlflowserver:0.11.2
+    - name: kserve-container
+      image: ghcr.io/kserve/mlserver:v1.3.5
       args:
         - --model_dir=/mnt/models
         - --port=8080

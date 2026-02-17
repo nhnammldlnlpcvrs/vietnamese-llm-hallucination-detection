@@ -1,8 +1,8 @@
-# kubernetes/helmfile.d/backend.yaml
+# kubernetes/helmfiles/backend.yaml
 releases:
   - name: hallucination-backend
     namespace: hallucination-prod
     chart: ../charts/hallucination-backend
-    installed: {{ .Environment.Values.backend.enabled }}
+    installed: {{ (.Values.backend | default dict).enabled | default true }}
     values:
       - ../values/backend-prod.yaml

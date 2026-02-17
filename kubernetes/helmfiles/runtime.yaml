@@ -1,4 +1,4 @@
-# kubernetes/helmfile.d/runtime.yaml
+# kubernetes/helmfiles/runtime.yaml
 hooks:
   - events: ["prepare"]
     showlogs: true
