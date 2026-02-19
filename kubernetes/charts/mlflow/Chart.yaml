@@ -1,7 +1,0 @@
-# kubernetes/charts/mlflow/Chart.yaml
-apiVersion: v2
-name: mlflow
-description: MLflow Tracking Server
-type: application
-version: 0.1.0
-appVersion: "2.10.0"
