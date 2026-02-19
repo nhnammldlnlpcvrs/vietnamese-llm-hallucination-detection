@@ -3,17 +3,27 @@ environments:
   prod:
     values:
       - values/platform-prod.yaml
+      - values/backend-prod.yaml
+      - values/model-prod.yaml
 
 helmDefaults:
   wait: true
   timeout: 600
   atomic: true
 
-helmfiles:
-  - path: helmfiles/backend.yaml
-    values:
-      - values/platform-prod.yaml
+releases:
+  - name: mlflow
+    namespace: hallucination-prod
+    chart: charts/mlflow
 
-  - path: helmfiles/model.yaml
-    values:
-      - values/platform-prod.yaml
+  - name: mlflow-runtime
+    namespace: hallucination-prod
+    chart: charts/mlflow-runtime
+
+  - name: hallucination-backend
+    namespace: hallucination-prod
+    chart: charts/hallucination-backend
+
+  - name: hallucination-model
+    namespace: hallucination-prod
+    chart: charts/hallucination-model

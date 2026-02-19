@@ -1,0 +1,33 @@
+# kubernetes/charts/mlflow/values.yaml
+replicaCount: 1
+
+image:
+  repository: ghcr.io/mlflow/mlflow
+  tag: "2.10.0"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: mlflow
+
+service:
+  type: ClusterIP
+  port: 5000
+
+mlflow:
+  backendStoreUri: sqlite:///mlflow.db
+  artifactRoot: s3://mlflow-artifacts-vihallu-nam
+
+aws:
+  enabled: true
+  accessKeyId: ""
+  secretAccessKey: ""
+  region: ap-southeast-1
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "1"
+    memory: "2Gi"
