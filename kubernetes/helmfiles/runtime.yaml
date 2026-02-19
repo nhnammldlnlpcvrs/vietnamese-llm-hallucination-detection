@@ -1,9 +1,0 @@
-# kubernetes/helmfiles/runtime.yaml
-hooks:
-  - events: ["prepare"]
-    showlogs: true
-    command: kubectl
-    args:
-      - apply
-      - -f
-      - ../runtimes/mlflow-cluster-runtime.yaml
