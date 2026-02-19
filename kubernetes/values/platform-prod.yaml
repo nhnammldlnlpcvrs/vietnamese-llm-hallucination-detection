@@ -1,9 +1,7 @@
 # kubernetes/values/platform-prod.yaml
-runtime:
-  enabled: true
+aws:
+  region: ap-southeast-1
+  secretName: aws-credentials
 
-backend:
-  enabled: true
-
-model:
-  enabled: true
+mlflow:
+  artifactRoot: s3://mlflow-artifacts-vihallu-nam/vihallu
