@@ -1,0 +1,51 @@
+# kubernetes/charts/mlflow/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  labels:
+    app.kubernetes.io/name: mlflow
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mlflow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mlflow
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: mlflow
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mlflow server \
+                --backend-store-uri {{ .Values.mlflow.backendStoreUri }} \
+                --default-artifact-root {{ .Values.mlflow.artifactRoot }} \
+                --host 0.0.0.0 \
+                --port 5000
+          ports:
+            - containerPort: 5000
+          env:
+            {{- if .Values.aws.enabled }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-aws-secret
+                  key: accessKeyId
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-aws-secret
+                  key: secretAccessKey
+            - name: AWS_DEFAULT_REGION
+              value: {{ .Values.aws.region }}
+            {{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}

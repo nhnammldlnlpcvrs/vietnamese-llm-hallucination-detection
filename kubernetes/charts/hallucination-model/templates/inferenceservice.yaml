@@ -3,14 +3,9 @@ apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
   name: {{ .Values.model.name }}
-  namespace: hallucination-prod
 spec:
   predictor:
     model:
       modelFormat:
         name: mlflow
-      runtime: kserve-mlserver
-
-      storageUri: {{ .Values.mlflow.storageUri }}
-      resources:
-        {{- toYaml .Values.resources | nindent 8 }}
+      storageUri: {{ .Values.mlflow.storageUri | quote }}

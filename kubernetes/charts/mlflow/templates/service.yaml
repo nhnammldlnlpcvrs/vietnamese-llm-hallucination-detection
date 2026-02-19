@@ -1,0 +1,17 @@
+# kubernetes/charts/mlflow/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  labels:
+    app.kubernetes.io/name: mlflow
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: 5000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: mlflow
