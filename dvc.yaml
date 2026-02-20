@@ -1,3 +1,4 @@
+# dvc.yaml
 stages:
   embed:
     cmd: python notebooks/embed_phobert.py
@@ -16,14 +17,15 @@ stages:
       - data/vihallu-vistral-dataset/vistral_train_predictions_with_probs.csv
     outs:
       - models/lgbm
-      - models/feature_schema.json
       - models/metadata.yaml
+      - models/feature_schema.json
 
   infer:
     cmd: python notebooks/infer-model-vihallu.py
     deps:
       - notebooks/infer-model-vihallu.py
       - features/phobert_embeddings.npy
+      - data/vihallu-dataset/vihallu-train.csv
       - data/vihallu-vistral-dataset/vistral_train_predictions_with_probs.csv
       - models/lgbm
       - models/feature_schema.json
@@ -34,4 +36,5 @@ stages:
     cmd: python scripts/auto_promote_registry.py
     deps:
       - scripts/auto_promote_registry.py
+      - models/metadata.yaml
     always_changed: true

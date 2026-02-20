@@ -1,6 +1,43 @@
-version: "3.9"
-
 services:
+  minio:
+    image: minio/minio:latest
+    container_name: hallucination-minio
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minio
+      - MINIO_ROOT_PASSWORD=minio123
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: hallucination-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      - MC_HOST_local=http://minio:minio123@minio:9000
+    entrypoint: >
+      /bin/sh -c "
+        mc mb local/vihallu-mlflow --ignore-existing;
+        mc mb local/vihallu-dvc    --ignore-existing;
+        mc anonymous set download local/vihallu-mlflow;
+        echo 'Buckets ready.';
+      "
+    networks:
+      - ai-network
+
   db:
     image: postgres:15
     container_name: hallucination-postgres
@@ -23,33 +60,33 @@ services:
 
   mlflow:
     container_name: hallucination-mlflow
-    build: 
+    build:
       context: .
       dockerfile: mlops/mlflow/Dockerfile
     ports:
       - "5000:5000"
-    volumes:
-      - ./mlops/mlflow_data:/mlflow
     depends_on:
       db:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     environment:
-      - BACKEND_STORE_URI=postgresql://user:password@db:5432/mlflow
       - DB_USER=user
       - DB_PASS=password
       - DB_HOST=db
-      - S3_BUCKET=vihallu-mlflow
+      - DB_NAME=mlflow
+      - MLFLOW_S3_BUCKET=vihallu-mlflow
       - AWS_ACCESS_KEY_ID=minio
       - AWS_SECRET_ACCESS_KEY=minio123
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-    command: >
-      mlflow server
-      --backend-store-uri postgresql://user:password@db:5432/mlflow
-      --default-artifact-root /mlflow/artifacts
-      --host 0.0.0.0
-      --port 5000
+      - MLFLOW_WORKERS=2
     networks:
       - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   backend:
     container_name: hallucination-backend
@@ -57,17 +94,21 @@ services:
       context: .
       dockerfile: docker/Dockerfile.backend
     environment:
-      MODEL_PATH: /app/models/phobert_finetuned_model
-      MLFLOW_TRACKING_URI: http://mlflow:5000
-      MLFLOW_MODEL_NAME: vihallu-lgbm
-      MLFLOW_MODEL_STAGE: Production
+      # MLflow
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_MODEL_NAME=vihallu-detector
+      - MLFLOW_MODEL_ALIAS=production
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     ports:
       - "8000:8000"
     volumes:
       - ./models:/app/models
-      - ./backend:/app/backend 
+      - ./backend:/app/backend
     depends_on:
-      - mlflow
+      mlflow:
+        condition: service_healthy
     networks:
       - ai-network
 
@@ -105,21 +146,23 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
     networks:
       - ai-network
-      
+
   ci:
     container_name: hallucination-ci
     build:
       context: .
       dockerfile: docker/Dockerfile.ci
     environment:
-      DISABLE_MODEL: "true"
+      - DISABLE_MODEL=true
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
     volumes:
       - .:/workspace
     command: >
@@ -129,9 +172,13 @@ services:
       --cov-report=term-missing
     networks:
       - ai-network
+    depends_on:
+      - mlflow
 
 volumes:
   postgres_data:
+  minio_data:
+  grafana_data:
 
 networks:
   ai-network:

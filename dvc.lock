@@ -34,25 +34,29 @@ stages:
       size: 21504128
     - path: notebooks/train-model-vihallu.py
       hash: md5
-      md5: 0286c34ad2a30cb4c7f979b8b16e1f50
-      size: 6564
+      md5: af038392c22e1e161d04fd17d3075ac7
+      size: 8541
     outs:
     - path: models/feature_schema.json
       hash: md5
-      md5: e59f1b1aaaa0b1aa7c37caf636b0846d
-      size: 372
+      md5: 8a6d59aa5a6d20d990c567a8c30326ca
+      size: 348
     - path: models/lgbm
       hash: md5
-      md5: b02965e01e8906e10a943d609fc454b9.dir
-      size: 32921564
+      md5: 3372436968e42b035cafffe537724879.dir
+      size: 32920837
       nfiles: 5
     - path: models/metadata.yaml
       hash: md5
-      md5: bc084f7f48182d1869a7428d86fc4831
-      size: 277
+      md5: 68414f93b23c7a86321c401218405fc9
+      size: 129
   infer:
     cmd: python notebooks/infer-model-vihallu.py
     deps:
+    - path: data/vihallu-dataset/vihallu-train.csv
+      hash: md5
+      md5: ade7a7128908af0dc9c5b5f3737d26c9
+      size: 10728910
     - path: 
         data/vihallu-vistral-dataset/vistral_train_predictions_with_probs.csv
       hash: md5
@@ -64,26 +68,30 @@ stages:
       size: 21504128
     - path: models/feature_schema.json
       hash: md5
-      md5: e59f1b1aaaa0b1aa7c37caf636b0846d
-      size: 372
+      md5: 8a6d59aa5a6d20d990c567a8c30326ca
+      size: 348
     - path: models/lgbm
       hash: md5
-      md5: b02965e01e8906e10a943d609fc454b9.dir
-      size: 32921564
+      md5: 3372436968e42b035cafffe537724879.dir
+      size: 32920837
       nfiles: 5
     - path: notebooks/infer-model-vihallu.py
       hash: md5
-      md5: f7558a30b763d11a03c2c05210615209
-      size: 2716
+      md5: b9d79f3f9028a4b3fedb5e71850d7b0e
+      size: 4258
     outs:
     - path: predictions/vihallu_infer_predictions.csv
       hash: md5
-      md5: 46309db27b28784760866d08810932ea
-      size: 754645
+      md5: e38cb734aa207a31d4ba483e32ad5b1a
+      size: 754641
   promote:
-    cmd: python scripts/auto_promote.py
+    cmd: python scripts/auto_promote_registry.py
     deps:
-    - path: scripts/auto_promote.py
+    - path: models/metadata.yaml
       hash: md5
-      md5: 25fdc4b050db862ec47354edec0c94cb
-      size: 999
+      md5: 68414f93b23c7a86321c401218405fc9
+      size: 129
+    - path: scripts/auto_promote_registry.py
+      hash: md5
+      md5: 186df838b232afdd914e68770d48fcbd
+      size: 4400
