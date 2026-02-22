@@ -1,0 +1,7 @@
+feature_dim: 778
+label_map:
+  extrinsic: 0
+  intrinsic: 2
+  'no': 1
+model_name: vihallu-detector
+oof_macro_f1: 0.863841596840476
