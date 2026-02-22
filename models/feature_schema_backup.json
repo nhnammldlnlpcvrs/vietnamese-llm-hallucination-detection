@@ -1,0 +1,21 @@
+{
+  "label_map": {
+    "extrinsic": 0,
+    "no": 1,
+    "intrinsic": 2
+  },
+  "feature_dim": 778,
+  "feature_order": [
+    "phobert_embedding[768]",
+    "context_len",
+    "context_word_count",
+    "prompt_len",
+    "prompt_word_count",
+    "response_len",
+    "response_word_count",
+    "cosine_similarity",
+    "prob_no",
+    "prob_extrinsic",
+    "prob_intrinsic"
+  ]
+}
