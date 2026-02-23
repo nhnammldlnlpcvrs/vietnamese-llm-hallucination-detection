@@ -104,10 +104,19 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           MLFLOW_S3_ENDPOINT_URL: ${{ secrets.MLFLOW_S3_ENDPOINT_URL }}
+          MLFLOW_S3_IGNORE_TLS: "true"
         run: |
-          pip install mlflow boto3
+          python3 -m venv .venv_mlflow
+          . .venv_mlflow/bin/activate
+          pip install --quiet --upgrade pip
+          pip install --quiet \
+            "mlflow==2.11.3" \
+            "boto3==1.34.69" \
+            "protobuf>=3.20,<5"
           python scripts/pull_model_from_registry.py
           ls -la backend/model_store/
+          deactivate
+          rm -rf .venv_mlflow
 
       - name: Build and push Docker image
         id: build
