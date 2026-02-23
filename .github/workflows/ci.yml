@@ -108,7 +108,7 @@ jobs:
         run: |
           python3 -m venv .venv_mlflow
           . .venv_mlflow/bin/activate
-          pip install --quiet --upgrade pip
+          pip install --quiet --upgrade pip setuptools wheel
           pip install --quiet \
             "mlflow==2.11.3" \
             "boto3==1.34.69" \
