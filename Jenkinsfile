@@ -2,29 +2,35 @@ pipeline {
     agent any
 
     environment {
-        KUBE_ID       = 'kubeconfig-minikube'
-        DOCKER_ID     = 'docker-hub-credentials'
-        HF_TOKEN_ID   = 'huggingface-token'
-        SSH_KEY_ID    = 'ubuntu-ssh-key'
+        KUBE_ID = 'kubeconfig-minikube'
+        GHCR_ID = 'ghcr-credentials'
+        HF_TOKEN_ID = 'hf-token'
+        MLFLOW_ID = 'mlflow-credentials'
+        MINIO_ID = 'minio-credentials'
 
+        REGISTRY = 'ghcr.io'
         DOCKER_REGISTRY_USER = 'nhnammldlnlpcvrs'
-        DOCKER_IMAGE_NAME    = 'vietnamese-llm-hallucination-detection'
-        FULL_IMAGE           = "${DOCKER_REGISTRY_USER}/${DOCKER_IMAGE_NAME}"
+        DOCKER_IMAGE_NAME = 'hallucination-backend'
+        FULL_IMAGE = "${REGISTRY}/${DOCKER_REGISTRY_USER}/${DOCKER_IMAGE_NAME}"
 
-        K8S_NAMESPACE   = 'hallucination-prod'
-        HELM_RELEASE    = 'hallucination-app'
+        K8S_NAMESPACE = 'hallucination-prod'
+        HELM_RELEASE = 'hallucination-backend'
         HELM_CHART_PATH = './kubernetes/charts/hallucination-backend'
+        HELM_VALUES = './kubernetes/values/backend-prod.yaml'
 
-        MLFLOW_TRACKING_URI = 'http://localhost:5000'
-        MODEL_NAME          = 'hallu-model'
-        MODEL_STAGE         = 'Production'
+        MLFLOW_TRACKING_URI = 'http://hallucination-mlflow:5000'
+        MLFLOW_S3_ENDPOINT = 'http://hallucination-minio:9000'
+        MLFLOW_MODEL_NAME = 'vihallu-detector'
+        MLFLOW_MODEL_ALIAS = 'production'
 
-        COVERAGE_THRESHOLD  = 80
+        COVERAGE_THRESHOLD = '80'
     }
 
     options {
         timestamps()
         disableConcurrentBuilds()
+        timeout(time: 60, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
     stages {
@@ -32,74 +38,96 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                script {
+                    env.GIT_SHA_SHORT = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+                    echo "Git SHA: ${env.GIT_SHA_SHORT}"
+                }
             }
         }
 
         stage('Unit Test & Coverage') {
             steps {
                 sh '''
-                docker build -f docker/Dockerfile.ci -t hallucination-ci:latest .
-                docker run --rm \
-                hallucination-ci:latest \
-                pytest tests/unit --cov=backend --cov-report=xml
+                    docker build -f docker/Dockerfile.ci -t hallucination-ci:${GIT_SHA_SHORT} .
+
+                    # Run tests & copy coverage.xml OUT of container
+                    CONTAINER_ID=$(docker create hallucination-ci:${GIT_SHA_SHORT} \
+                        pytest tests/unit \
+                            --cov=backend \
+                            --cov-report=xml:/tmp/coverage.xml \
+                            --cov-fail-under=${COVERAGE_THRESHOLD})
+
+                    docker start -a $CONTAINER_ID
+                    EXIT_CODE=$?
+
+                    docker cp $CONTAINER_ID:/tmp/coverage.xml ./coverage.xml || true
+                    docker rm $CONTAINER_ID
+
+                    exit $EXIT_CODE
                 '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'coverage.xml', allowEmptyArchive: true
+                }
             }
         }
 
-        stage('Check Coverage Threshold') {
+        stage('Quality Gate') {
             steps {
                 script {
                     def coverage = sh(
-                        script: "grep -o 'line-rate=\"[0-9.]*\"' coverage.xml | head -1 | cut -d'\"' -f2",
+                        script: """python3 -c \"
+                            import xml.etree.ElementTree as ET
+                            tree = ET.parse('coverage.xml')
+                            print(round(float(tree.getroot().attrib['line-rate']) * 100, 1))
+                            \"""",
                         returnStdout: true
-                    ).trim().toFloat() * 100
+                    ).trim().toFloat()
 
-                    echo "Detected coverage: ${coverage}%"
+                    echo "Coverage: ${coverage}%  (threshold: ${COVERAGE_THRESHOLD}%)"
 
                     if (coverage < COVERAGE_THRESHOLD.toInteger()) {
-                        error("Coverage below ${COVERAGE_THRESHOLD}% - stopping pipeline")
+                        error("Coverage ${coverage}% is below threshold ${COVERAGE_THRESHOLD}%")
                     }
                 }
             }
         }
 
-        stage('Provision Infra (Terraform + Ansible)') {
+        stage('Provision Infra') {
+            when {
+                expression { params.PROVISION == true }
+            }
             steps {
                 withCredentials([
-                    sshUserPrivateKey(credentialsId: SSH_KEY_ID, keyFileVariable: 'SSH_KEY'),
                     file(credentialsId: KUBE_ID, variable: 'KUBECONFIG'),
                     usernamePassword(
-                        credentialsId: DOCKER_ID,
+                        credentialsId: GHCR_ID,
                         usernameVariable: 'GHCR_USERNAME',
                         passwordVariable: 'GHCR_TOKEN'
                     )
                 ]) {
                     withEnv([
-                        "ANSIBLE_K8S_AUTH_KUBECONFIG=$KUBECONFIG",
-                        "TF_VAR_kube_config=$KUBECONFIG",
-                        "TF_VAR_ghcr_username=$GHCR_USERNAME",
-                        "TF_VAR_ghcr_token=$GHCR_TOKEN"
+                        "ANSIBLE_K8S_AUTH_KUBECONFIG=${KUBECONFIG}",
+                        "TF_VAR_ghcr_username=${GHCR_USERNAME}",
+                        "TF_VAR_ghcr_token=${GHCR_TOKEN}"
                     ]) {
-
-                        sh "kubectl cluster-info"
-
                         dir('iac/terraform') {
                             sh '''
-                            terraform init
-                            terraform apply -auto-approve
+                                terraform init
+                                terraform apply -auto-approve
                             '''
                         }
-
                         dir('iac/ansible') {
                             sh '''
-                            ansible-galaxy collection install kubernetes.core
-                            export ANSIBLE_HOST_KEY_CHECKING=False
-
-                            ansible-playbook \
-                            -i inventory.ini \
-                            setup_k8s_stack.yaml \
-                            --private-key=$SSH_KEY \
-                            --extra-vars "ansible_python_interpreter=/usr/bin/python3 kubeconfig_path=$KUBECONFIG"
+                                ansible-galaxy collection install kubernetes.core --force
+                                ansible-playbook setup_k8s_stack.yaml \
+                                    -i inventory.ini \
+                                    --extra-vars "kubeconfig_path=${KUBECONFIG}" \
+                                    --start-at-task "Apply KServe ClusterServingRuntime (MLflow)"
                             '''
                         }
                     }
@@ -107,96 +135,192 @@ pipeline {
             }
         }
 
-
-        stage('Download Model Artifacts (MLflow)') {
+        stage('Pull Model Artifacts') {
             steps {
-                sh '''
-                echo "Downloading model from MLflow..."
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: MINIO_ID,
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    sh '''
+                        pip install --quiet mlflow boto3
 
-                python -m venv .venv_mlflow
-                . .venv_mlflow/bin/activate
+                        export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
+                        export MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT}
+                        export MLFLOW_S3_IGNORE_TLS=true
 
-                pip install --no-cache-dir mlflow boto3 psycopg2-binary
+                        python scripts/pull_model_from_registry.py
 
-                rm -rf models
-                mkdir -p models
-
-                export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
-
-                mlflow artifacts download \
-                  --artifact-uri models:/${MODEL_NAME}/${MODEL_STAGE} \
-                  --dst-path models
-
-                echo "Validating artifacts..."
-
-                test -d models/models/phobert
-                test -d models/models/lgbm
-                test -f models/models/metadata.yaml
-
-                echo "Model download successful"
-                '''
+                        # Validate artifacts
+                        test -f backend/model_store/model_manifest.json
+                        echo "[OK] Model artifacts ready"
+                        cat backend/model_store/model_manifest.json
+                    '''
+                }
             }
         }
 
-        stage('Build & Push Docker Image') {
+        stage('Build & Push Image') {
             steps {
-                script {
-                    sh """
-                    docker build -f docker/Dockerfile.backend \
-                      -t ${FULL_IMAGE}:${BUILD_NUMBER} .
-                    """
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: GHCR_ID,
+                        usernameVariable: 'GHCR_USERNAME',
+                        passwordVariable: 'GHCR_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        echo "${GHCR_TOKEN}" | docker login ghcr.io \
+                            -u "${GHCR_USERNAME}" --password-stdin
 
-                    withDockerRegistry([credentialsId: DOCKER_ID]) {
-                        sh """
-                        docker push ${FULL_IMAGE}:${BUILD_NUMBER}
-                        docker tag ${FULL_IMAGE}:${BUILD_NUMBER} ${FULL_IMAGE}:latest
+                        docker build \
+                            -f docker/Dockerfile.backend \
+                            -t ${FULL_IMAGE}:${GIT_SHA_SHORT} \
+                            -t ${FULL_IMAGE}:latest \
+                            --build-arg GIT_SHA=${GIT_SHA_SHORT} \
+                            .
+
+                        docker push ${FULL_IMAGE}:${GIT_SHA_SHORT}
                         docker push ${FULL_IMAGE}:latest
-                        """
+
+                        echo "[OK] Pushed ${FULL_IMAGE}:${GIT_SHA_SHORT}"
+                    '''
+                }
+            }
+        }
+
+        stage('Resolve StorageUri') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: MINIO_ID,
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    sh '''
+                        export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
+                        export MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT}
+                        export MLFLOW_MODEL_NAME=${MLFLOW_MODEL_NAME}
+                        export MLFLOW_MODEL_ALIAS=${MLFLOW_MODEL_ALIAS}
+
+                        python scripts/resolve_storage_uri.py \
+                            --update-yaml mlops/kserve/inference-service.yaml
+
+                        echo "[OK] inference-service.yaml updated"
+                        grep storageUri mlops/kserve/inference-service.yaml
+                    '''
+                }
+            }
+        }
+
+        stage('Approval') {
+            steps {
+                input message: "Deploy ${FULL_IMAGE}:${GIT_SHA_SHORT} to production?",
+                      ok: "Deploy"
+            }
+        }
+
+        stage('Deploy Backend') {
+            steps {
+                withCredentials([
+                    file(credentialsId: KUBE_ID, variable: 'KUBECONFIG')
+                ]) {
+                    withEnv(["KUBECONFIG=${KUBECONFIG}"]) {
+                        sh '''
+                            helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
+                                --namespace ${K8S_NAMESPACE} \
+                                --create-namespace \
+                                -f ${HELM_VALUES} \
+                                --set image.tag=${GIT_SHA_SHORT} \
+                                --set image.repository=${FULL_IMAGE} \
+                                --wait --timeout=5m
+
+                            kubectl rollout status deployment/${HELM_RELEASE} \
+                                -n ${K8S_NAMESPACE} --timeout=5m
+                        '''
                     }
                 }
             }
         }
 
-        stage('Manual Approval') {
+        stage('Deploy KServe') {
             steps {
-                input message: "Approve deployment to production?"
+                withCredentials([
+                    file(credentialsId: KUBE_ID, variable: 'KUBECONFIG')
+                ]) {
+                    withEnv(["KUBECONFIG=${KUBECONFIG}"]) {
+                        sh '''
+                            kubectl apply -f mlops/kserve/inference-service.yaml
+
+                            # Wait for InferenceService ready (up to 5 min)
+                            kubectl wait inferenceservice/hallucination-detector \
+                                -n ${K8S_NAMESPACE} \
+                                --for=condition=Ready \
+                                --timeout=300s || \
+                            kubectl get inferenceservice -n ${K8S_NAMESPACE}
+                        '''
+                    }
+                }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Smoke Test') {
             steps {
                 withCredentials([
-                    string(credentialsId: HF_TOKEN_ID, variable: 'HF_TOKEN'),
-                    file(credentialsId: KUBE_ID, variable: 'KUBECONFIG_FILE')
+                    file(credentialsId: KUBE_ID, variable: 'KUBECONFIG')
                 ]) {
-                    withEnv(["KUBECONFIG=${KUBECONFIG_FILE}"]) {
-                        sh """
-                        helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
-                          --namespace ${K8S_NAMESPACE} \
-                          --create-namespace \
-                          --set image.repository=${FULL_IMAGE} \
-                          --set image.tag=${BUILD_NUMBER} \
-                          --set secrets.hfToken=${HF_TOKEN} \
-                          --wait --timeout 5m
+                    withEnv(["KUBECONFIG=${KUBECONFIG}"]) {
+                        sh '''
+                            # Port-forward backend for smoke test
+                            kubectl port-forward svc/${HELM_RELEASE} 18000:8000 \
+                                -n ${K8S_NAMESPACE} &
+                            PF_PID=$!
+                            sleep 5
 
-                        kubectl rollout status deployment/${HELM_RELEASE} -n ${K8S_NAMESPACE}
-                        kubectl get pods -n ${K8S_NAMESPACE}
-                        """
+                            # Health check
+                            curl -f http://localhost:18000/health || \
+                                (kill $PF_PID && exit 1)
+
+                            # Quick inference test
+                            curl -f -X POST http://localhost:18000/predict \
+                                -H "Content-Type: application/json" \
+                                -d '{"text": "smoke test", "context": "test"}' || \
+                                (kill $PF_PID && exit 1)
+
+                            kill $PF_PID
+                            echo "[OK] Smoke test passed"
+                        '''
                     }
                 }
             }
         }
     }
 
+    parameters {
+        booleanParam(
+            name: 'PROVISION',
+            defaultValue: false,
+            description: 'Run Terraform + Ansible provisioning (only needed for fresh setup)'
+        )
+    }
+
     post {
         success {
-            echo "Pipeline completed successfully!"
+            echo """
+            Pipeline PASSED
+            Image  : ${FULL_IMAGE}:${env.GIT_SHA_SHORT}
+            Commit : ${env.GIT_SHA_SHORT}
+            """
         }
         failure {
-            echo "Pipeline failed!"
+            echo "Pipeline FAILED at stage: ${env.STAGE_NAME}"
         }
         always {
             cleanWs()
+            sh 'docker image prune -f || true'
         }
     }
 }

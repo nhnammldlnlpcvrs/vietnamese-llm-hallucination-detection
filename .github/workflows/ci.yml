@@ -3,16 +3,23 @@ name: CI Pipeline
 on:
   push:
     branches:
-      - "feature*" 
+      - "feature*"
       - main
   pull_request:
     branches:
       - main
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/hallucination-backend
+  PYTHON_VERSION: "3.10"
+
 jobs:
   test:
     name: Unit Test & Quality Gate
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    outputs:
+      coverage: ${{ steps.coverage.outputs.percentage }}
 
     steps:
       - uses: actions/checkout@v4
@@ -21,16 +28,134 @@ jobs:
         run: |
           docker build \
             -f docker/Dockerfile.ci \
-            -t hallucination-ci .
+            -t hallucination-ci:${{ github.sha }} .
 
-      - name: Run unit tests (with Coverage)
+      - name: Run unit tests with coverage
         run: |
           docker run --rm \
-            hallucination-ci \
-            pytest tests/unit --cov=backend --cov-report=xml --cov-fail-under=80
+            -v ${{ github.workspace }}:/workspace \
+            hallucination-ci:${{ github.sha }} \
+            pytest tests/unit \
+              --cov=backend \
+              --cov-report=xml:/workspace/coverage.xml \
+              --cov-report=term-missing \
+              --cov-fail-under=80
+
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          COVERAGE=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          root = tree.getroot()
+          print(round(float(root.attrib['line-rate']) * 100, 1))
+          ")
+          echo "percentage=${COVERAGE}" >> $GITHUB_OUTPUT
+          echo "Coverage: ${COVERAGE}%"
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage.xml
+
+  build:
+    name: Build & Push Image
+    runs-on: self-hosted
+    needs: test
+    if: github.event_name == 'push'
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+      image_digest: ${{ steps.build.outputs.digest }}
+      short_sha: ${{ steps.sha.outputs.short }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,suffix=,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=branch
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Pull model from MLflow Registry
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          MLFLOW_MODEL_NAME: vihallu-detector
+          MLFLOW_MODEL_ALIAS: production
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          MLFLOW_S3_ENDPOINT_URL: ${{ secrets.MLFLOW_S3_ENDPOINT_URL }}
+        run: |
+          pip install mlflow boto3
+          python scripts/pull_model_from_registry.py
+          ls -la backend/model_store/
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+      - name: Output image info
+        run: |
+          echo "Image pushed:"
+          echo "Tags: ${{ steps.meta.outputs.tags }}"
+          echo "Digest: ${{ steps.build.outputs.digest }}"
+          echo "SHA: ${{ steps.sha.outputs.short }}"
+
+  trigger-deploy:
+    name: Trigger Jenkins CD
+    runs-on: self-hosted
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Trigger Jenkins deployment
+        run: |
+          curl -f -X POST \
+            "${{ secrets.JENKINS_URL }}/job/hallucination-cd/buildWithParameters" \
+            --user "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
+            --data-urlencode "IMAGE_TAG=${{ needs.build.outputs.short_sha }}" \
+            --data-urlencode "GIT_SHA=${{ github.sha }}" \
+            --data-urlencode "GIT_BRANCH=${{ github.ref_name }}" \
+            --data-urlencode "TRIGGERED_BY=github-actions"
+          echo "Jenkins CD triggered with IMAGE_TAG=${{ needs.build.outputs.short_sha }}"
+
+      - name: Comment on commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: `**CD Pipeline Triggered**\n- Image: \`ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.short_sha }}\`\n- Jenkins: ${{ secrets.JENKINS_URL }}/job/hallucination-cd/`
+            })
