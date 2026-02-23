@@ -1,0 +1,123 @@
+{
+  "title": "Data Drift — Evidently",
+  "uid": "data-drift",
+  "tags": ["drift", "evidently", "mlops"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "refresh": "5m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Dataset Drift Detected",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "evidently_dataset_drift_detected",
+          "legendFormat": "Drift"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "NO DRIFT", "color": "green" }, "1": { "text": "DRIFT!", "color": "red" } }, "type": "value" }
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Drifted Features Count",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "evidently_drifted_features_count",
+          "legendFormat": "Features Drifted"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Share of Drifted Features (%)",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "evidently_share_of_drifted_features * 100",
+          "legendFormat": "Drift Share"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 20 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Prediction Distribution Shift",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "evidently_current_label_ratio{label=\"extrinsic\"}",
+          "legendFormat": "Current: extrinsic"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "evidently_current_label_ratio{label=\"no\"}",
+          "legendFormat": "Current: no"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "evidently_current_label_ratio{label=\"intrinsic\"}",
+          "legendFormat": "Current: intrinsic"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "evidently_reference_label_ratio{label=\"extrinsic\"}",
+          "legendFormat": "Reference: extrinsic"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Per-Feature Drift Score",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "evidently_feature_drift_score",
+          "legendFormat": "{{ feature }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 0.3 }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

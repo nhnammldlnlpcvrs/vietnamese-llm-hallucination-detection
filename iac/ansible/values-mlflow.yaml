@@ -1,8 +1,41 @@
 # iac/ansible/values-mlflow.yaml
+# Helm chart: community-charts/mlflow
+
 image:
   repository: ghcr.io/mlflow/mlflow
-  tag: "v3.9.0"
+  tag: "v2.11.3"
   pullPolicy: IfNotPresent
 
 imagePullSecrets:
   - name: ghcr-secret
+
+# PostgreSQL backend
+backendStore:
+  postgres:
+    enabled: true
+    host: "postgres.hallucination-prod.svc.cluster.local"
+    port: 5432
+    database: mlflow
+    user: user
+    password: password
+
+# S3/MinIO artifact store
+artifactRoot:
+  s3:
+    enabled: true
+    bucket: vihallu-mlflow
+    awsAccessKeyId: minio
+    awsSecretAccessKey: minio123
+    s3EndpointUrl: "http://minio.hallucination-prod.svc.cluster.local:9000"
+
+service:
+  type: ClusterIP
+  port: 5000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

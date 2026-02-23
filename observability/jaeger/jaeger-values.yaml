@@ -1,8 +1,0 @@
-allInOne:
-  enabled: true
-  ingress:
-    enabled: true
-    hosts:
-      - jaeger.hallucination.com
-storage:
-  type: memory 

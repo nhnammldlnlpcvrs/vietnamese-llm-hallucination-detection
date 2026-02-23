@@ -5,23 +5,62 @@ metadata:
   name: mlflow-runtime
 spec:
   supportedModelFormats:
-  - name: mlflow
-    version: "1"
-    autoSelect: true
+    - name: mlflow
+      version: "1"
+      autoSelect: true
+
+  protocolVersions:
+    - v2
 
   containers:
-  - name: kserve-container
-    image: kserve/mlserver:latest
-    env:
-    - name: AWS_ACCESS_KEY_ID
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_ACCESS_KEY_ID
-    - name: AWS_SECRET_ACCESS_KEY
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_SECRET_ACCESS_KEY
-    - name: AWS_DEFAULT_REGION
-      value: ap-southeast-1
+    - name: kserve-container
+      image: kserve/mlserver:1.3.5
+      args:
+        - --http_port=8080
+        - --grpc_port=8081
+        - --model_name={{.Name}}
+        - --model_uri={{.StorageUri}}
+        - --mlserver_model_implementation=mlserver_mlflow.MLflowRuntime
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+      env:
+        # MLflow tracking
+        - name: MLFLOW_TRACKING_URI
+          valueFrom:
+            secretKeyRef:
+              name: mlflow-secret
+              key: MLFLOW_TRACKING_URI
+
+        # S3/MinIO for artifact storage
+        - name: MLFLOW_S3_ENDPOINT_URL
+          valueFrom:
+            secretKeyRef:
+              name: mlflow-secret
+              key: MLFLOW_S3_ENDPOINT_URL
+
+        # AWS credentials for S3
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: AWS_SECRET_ACCESS_KEY
+
+        # Region (required by boto3 even for MinIO)
+        - name: AWS_DEFAULT_REGION
+          value: "ap-southeast-1"
+
+        # Disable SSL for MinIO
+        - name: AWS_CA_BUNDLE
+          value: ""
+        - name: MLFLOW_S3_IGNORE_TLS
+          value: "true"

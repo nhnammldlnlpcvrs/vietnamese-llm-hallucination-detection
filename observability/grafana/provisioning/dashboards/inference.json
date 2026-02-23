@@ -1,0 +1,112 @@
+{
+  "title": "Hallucination API — Inference Metrics",
+  "uid": "inference-metrics",
+  "tags": ["inference", "hallucination", "api"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(http_requests_total{job=\"hallucination-backend\"}[1m])) by (status_code)",
+          "legendFormat": "HTTP {{ status_code }}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "P95 Latency (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"hallucination-backend\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P95 latency"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"hallucination-backend\"}[5m])) by (le)) * 1000",
+          "legendFormat": "P50 latency"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms" }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Prediction Label Distribution",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(hallucination_predictions_total) by (label)",
+          "legendFormat": "{{ label }}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error Rate (%)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(http_requests_total{job=\"hallucination-backend\", status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"hallucination-backend\"}[5m])) * 100",
+          "legendFormat": "Error %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "KServe Inference Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(revision_request_latencies_bucket{namespace=\"hallucination-prod\"}[5m])) by (le, revision_name)) / 1000",
+          "legendFormat": "P95 {{ revision_name }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms" }
+      }
+    },
+    {
+      "id": 6,
+      "title": "KServe Active Pods (Scale-to-Zero)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "kube_deployment_status_replicas_ready{namespace=\"hallucination-prod\"}",
+          "legendFormat": "{{ deployment }}"
+        }
+      ]
+    }
+  ]
+}

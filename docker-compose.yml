@@ -61,8 +61,8 @@ services:
   mlflow:
     container_name: hallucination-mlflow
     build:
-      context: .
-      dockerfile: mlops/mlflow/Dockerfile
+      context: mlops/mlflow
+      dockerfile: Dockerfile
     ports:
       - "5000:5000"
     depends_on:
@@ -94,13 +94,14 @@ services:
       context: .
       dockerfile: docker/Dockerfile.backend
     environment:
-      # MLflow
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - MLFLOW_MODEL_NAME=vihallu-detector
       - MLFLOW_MODEL_ALIAS=production
       - AWS_ACCESS_KEY_ID=minio
       - AWS_SECRET_ACCESS_KEY=minio123
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=hallucination-backend
     ports:
       - "8000:8000"
     volumes:
@@ -130,30 +131,124 @@ services:
       - ai-network
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.48.0
     container_name: hallucination-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yaml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
     volumes:
-      - ./observability/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml
+      - ./observability/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus_data:/prometheus
     ports:
       - "9090:9090"
     networks:
       - ai-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: hallucination-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./observability/loki/loki-local.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: hallucination-promtail
+    volumes:
+      - ./observability/loki/promtail-local.yaml:/etc/promtail/promtail.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/promtail.yaml
+    depends_on:
+      - loki
+    networks:
+      - ai-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.54
+    container_name: hallucination-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+      - MEMORY_MAX_TRACES=10000
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:16686"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.2.0
     container_name: hallucination-grafana
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/provisioning/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
     networks:
       - ai-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  evidently:
+    container_name: hallucination-evidently
+    build:
+      context: ./observability/evidently
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - REFERENCE_DATA_PATH=/data/vihallu_infer_predictions.csv
+      - CURRENT_DATA_PATH=/data/current_predictions.csv
+      - REPORT_OUTPUT_DIR=/reports
+      - DRIFT_CHECK_INTERVAL_SEC=300
+    volumes:
+      - ./predictions:/data:ro
+      - evidently_reports:/reports
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   ci:
     container_name: hallucination-ci
@@ -179,6 +274,9 @@ volumes:
   postgres_data:
   minio_data:
   grafana_data:
+  prometheus_data:
+  loki_data:
+  evidently_reports:
 
 networks:
   ai-network:

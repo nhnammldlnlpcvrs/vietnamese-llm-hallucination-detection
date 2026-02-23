@@ -3,10 +3,11 @@ replicaCount: 2
 
 image:
   repository: ghcr.io/nhnammldlnlpcvrs/hallucination-backend
-  tag: "2026.02.06"
+  tag: "latest"
   pullPolicy: IfNotPresent
 
 service:
+  type: ClusterIP
   port: 8000
 
 autoscaling:
@@ -14,7 +15,52 @@ autoscaling:
   minReplicas: 2
   maxReplicas: 5
   targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
 
 env:
   ENVIRONMENT: production
   LOG_LEVEL: info
+
+  # MLflow — loaded from secret
+  MLFLOW_MODEL_NAME: vihallu-detector
+  MLFLOW_MODEL_ALIAS: production
+
+  # KServe endpoint (backend calls KServe for inference)
+  KSERVE_ENDPOINT: "http://hallucination-detector.hallucination-prod.svc.cluster.local/v2/models/hallucination-detector/infer"
+
+  # Tracing
+  OTEL_SERVICE_NAME: hallucination-backend
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-collector.monitoring.svc.cluster.local:4317"
+  OTEL_TRACES_EXPORTER: otlp
+
+envFromSecrets:
+  - secretName: mlflow-secret
+    keys:
+      - MLFLOW_TRACKING_URI
+      - MLFLOW_S3_ENDPOINT_URL
+  - secretName: aws-credentials
+    keys:
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 10

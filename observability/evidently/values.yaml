@@ -1,0 +1,48 @@
+# observability/evidently/values.yaml
+# Custom deployment for Evidently drift service
+# Deployed as a simple K8s Deployment + Service
+
+evidently-drift:
+  replicaCount: 1
+
+  image:
+    repository: your-registry/evidently-drift-service
+    tag: latest
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 8001
+    targetPort: 8001
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8001"
+      prometheus.io/path: "/metrics"
+
+  env:
+    REFERENCE_DATA_PATH: "/data/predictions/vihallu_infer_predictions.csv"
+    CURRENT_DATA_PATH: "/data/predictions/current_predictions.csv"
+    REPORT_OUTPUT_DIR: "/reports/drift"
+    DRIFT_CHECK_INTERVAL_SEC: "300"
+    EVIDENTLY_PORT: "8001"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  volumeMounts:
+    - name: predictions-data
+      mountPath: /data/predictions
+    - name: drift-reports
+      mountPath: /reports/drift
+
+  volumes:
+    - name: predictions-data
+      persistentVolumeClaim:
+        claimName: predictions-pvc
+    - name: drift-reports
+      emptyDir: {}

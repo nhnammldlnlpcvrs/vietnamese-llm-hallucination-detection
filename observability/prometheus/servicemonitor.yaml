@@ -2,8 +2,8 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: hallucination-detector-monitor
-  namespace: monitoring
+  name: hallucination-backend-monitor
+  namespace: hallucination-prod
   labels:
     release: monitoring-stack
 spec:
@@ -14,6 +14,26 @@ spec:
     matchNames:
       - hallucination-prod
   endpoints:
-    - port: http 
+    - port: http
       path: /metrics
       interval: 15s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: evidently-drift-monitor
+  namespace: hallucination-prod
+  labels:
+    release: monitoring-stack
+spec:
+  selector:
+    matchLabels:
+      app: evidently-drift-service
+  namespaceSelector:
+    matchNames:
+      - hallucination-prod
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s

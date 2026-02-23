@@ -1,6 +1,29 @@
 # kubernetes/values/model-prod.yaml
 model:
   name: hallucination-detector
+  namespace: hallucination-prod
 
-mlflow:
-  storageUri: s3://mlflow-artifacts-vihallu-nam/vihallu/Production
+  # KServe InferenceService config
+  runtime: mlflow-runtime
+
+  # storageUri: set by CI/CD script (pull_model_from_registry.py resolves this)
+  # Format: s3://bucket/artifacts/<experiment_id>/<run_id>/artifacts/model
+  storageUri: "s3://vihallu-mlflow/artifacts/1"
+
+  # Scale-to-zero via Knative
+  minReplicas: 0
+  maxReplicas: 3
+  scaleTarget: 10
+  scaleToZeroGracePeriod: "120s"
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "2Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+
+  secrets:
+    mlflow: mlflow-secret
+    aws: aws-credentials

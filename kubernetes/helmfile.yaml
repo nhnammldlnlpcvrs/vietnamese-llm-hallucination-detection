@@ -1,4 +1,22 @@
 # kubernetes/helmfile.yaml
+# Manages all Helm releases for the hallucination detection MLOps platform
+# Usage:
+#   helmfile sync                    — deploy everything
+#   helmfile sync -l tier=infra      — deploy infrastructure only
+#   helmfile sync -l tier=app        — deploy application only
+#   helmfile sync -l tier=observability — deploy observability only
+#   helmfile destroy                 — remove everything
+
+repositories:
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
+  - name: grafana
+    url: https://grafana.github.io/helm-charts
+  - name: jaegertracing
+    url: https://jaegertracing.github.io/helm-charts
+  - name: jetstack
+    url: https://charts.jetstack.io
+
 environments:
   prod:
     values:
@@ -10,20 +28,119 @@ helmDefaults:
   wait: true
   timeout: 600
   atomic: true
+  cleanupOnFail: true
 
 releases:
+  - name: namespaces
+    namespace: default
+    chart: charts/namespaces
+    labels:
+      tier: infra
+
   - name: mlflow
     namespace: hallucination-prod
     chart: charts/mlflow
+    labels:
+      tier: infra
+    needs:
+      - default/namespaces
 
   - name: mlflow-runtime
     namespace: hallucination-prod
     chart: charts/mlflow-runtime
+    labels:
+      tier: infra
+    needs:
+      - hallucination-prod/mlflow
 
   - name: hallucination-backend
     namespace: hallucination-prod
     chart: charts/hallucination-backend
+    labels:
+      tier: app
+    values:
+      - values/backend-prod.yaml
+    needs:
+      - hallucination-prod/mlflow
 
   - name: hallucination-model
     namespace: hallucination-prod
     chart: charts/hallucination-model
+    labels:
+      tier: app
+    values:
+      - values/model-prod.yaml
+    needs:
+      - hallucination-prod/mlflow-runtime
+
+  - name: nginx-gateway
+    namespace: hallucination-prod
+    chart: ingress-nginx/ingress-nginx
+    labels:
+      tier: infra
+    values:
+      - ../gateway/nginx/custom-values.yaml
+    needs:
+      - default/namespaces
+
+  - name: monitoring-stack
+    namespace: monitoring
+    chart: prometheus-community/kube-prometheus-stack
+    version: "55.5.0"
+    labels:
+      tier: observability
+      component: metrics
+    values:
+      - ../observability/prometheus/values.yaml
+    needs:
+      - default/namespaces
+
+  - name: loki-stack
+    namespace: monitoring
+    chart: grafana/loki-stack
+    version: "2.10.2"
+    labels:
+      tier: observability
+      component: logging
+    values:
+      - ../observability/loki/values.yaml
+    needs:
+      - default/namespaces
+
+  - name: jaeger
+    namespace: monitoring
+    chart: jaegertracing/jaeger
+    version: "0.71.14"
+    labels:
+      tier: observability
+      component: tracing
+    values:
+      - ../observability/jaeger/values.yaml
+    needs:
+      - default/namespaces
+
+  - name: grafana
+    namespace: monitoring
+    chart: grafana/grafana
+    version: "7.0.19"
+    labels:
+      tier: observability
+      component: dashboards
+    values:
+      - ../observability/grafana/values.yaml
+    needs:
+      - monitoring/monitoring-stack
+      - monitoring/loki-stack
+      - monitoring/jaeger
+
+  - name: evidently-drift
+    namespace: hallucination-prod
+    chart: charts/evidently-drift
+    labels:
+      tier: observability
+      component: drift
+    values:
+      - ../observability/evidently/values.yaml
+    needs:
+      - monitoring/monitoring-stack
+      - hallucination-prod/hallucination-backend

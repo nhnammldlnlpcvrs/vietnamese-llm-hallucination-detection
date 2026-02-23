@@ -1,0 +1,68 @@
+# observability/prometheus/values.yaml
+# Helm chart: kube-prometheus-stack
+# helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
+kube-prometheus-stack:
+  fullnameOverride: monitoring-stack
+
+  prometheus:
+    prometheusSpec:
+      # Auto-discover ServiceMonitors across all namespaces
+      serviceMonitorSelectorNilUsesHelmValues: false
+      serviceMonitorNamespaceSelector: {}
+      serviceMonitorSelector: {}
+
+      # Retention
+      retention: 15d
+      retentionSize: "10GB"
+
+      scrapeInterval: "15s"
+      evaluationInterval: "15s"
+
+      # Extra scrape configs for non-K8s targets
+      additionalScrapeConfigs:
+        - job_name: "hallucination-backend"
+          metrics_path: "/metrics"
+          scrape_interval: "10s"
+          kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names:
+                  - hallucination-prod
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              action: keep
+              regex: hallucination-chart-backend
+
+        - job_name: "kserve-inference"
+          metrics_path: "/metrics"
+          scrape_interval: "15s"
+          kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names:
+                  - hallucination-prod
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_label_serving_knative_dev_service]
+              action: keep
+              regex: hallucination-model.*
+
+        - job_name: "evidently-drift"
+          metrics_path: "/metrics"
+          scrape_interval: "60s"
+          static_configs:
+            - targets: ["evidently-drift-service:8001"]
+              labels:
+                service: "evidently"
+
+  alertmanager:
+    enabled: false
+
+  grafana:
+    enabled: false
+
+  nodeExporter:
+    enabled: true
+
+  kubeStateMetrics:
+    enabled: true
