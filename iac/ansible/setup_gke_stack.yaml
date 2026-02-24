@@ -1,0 +1,299 @@
+# iac/ansible/setup_gke_stack.yaml
+# Provision KServe + Observability stack trên GKE cluster
+# Chạy SAU KHI terraform apply xong
+
+- name: Setup GKE Stack
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    kubeconfig_path: "{{ lookup('env', 'KUBECONFIG') | default('~/.kube/config') }}"
+    kserve_version: "v0.11.0"
+    cert_manager_version: "v1.14.5"
+    namespace_prod: "hallucination-prod"
+    namespace_monitoring: "monitoring"
+    namespace_kserve: "kserve"
+    namespace_cert_manager: "cert-manager"
+
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+    USE_GKE_GCLOUD_AUTH_PLUGIN: "True"
+
+  tasks:
+
+    # ── 0. Verify GKE connection ───────────────────────────────────────────
+    - name: Verify kubectl connected to GKE
+      command: kubectl cluster-info
+      register: cluster_info
+      failed_when: "'running' not in cluster_info.stdout | lower"
+
+    - name: Show cluster info
+      debug:
+        msg: "{{ cluster_info.stdout_lines[0] }}"
+
+    # ── 1. Add Helm repositories ──────────────────────────────────────────
+    - name: Add Helm repositories
+      command: helm repo add {{ item.name }} {{ item.url }}
+      loop:
+        - { name: jetstack,             url: "https://charts.jetstack.io" }
+        - { name: kserve-charts,        url: "https://kserve.github.io/helm-charts" }
+        - { name: prometheus-community, url: "https://prometheus-community.github.io/helm-charts" }
+        - { name: grafana,              url: "https://grafana.github.io/helm-charts" }
+        - { name: jaegertracing,        url: "https://jaegertracing.github.io/helm-charts" }
+      ignore_errors: true
+
+    - name: Update Helm repositories
+      command: helm repo update
+      check_mode: false
+
+    # ── 2. Namespaces ─────────────────────────────────────────────────────
+    - name: Create namespaces
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ item }}"
+      loop:
+        - "{{ namespace_prod }}"
+        - "{{ namespace_monitoring }}"
+        - "{{ namespace_kserve }}"
+        - "{{ namespace_cert_manager }}"
+
+    # ── 3. Cert-Manager ───────────────────────────────────────────────────
+    - name: Install Cert-Manager
+      kubernetes.core.helm:
+        name: cert-manager
+        chart_ref: jetstack/cert-manager
+        release_namespace: "{{ namespace_cert_manager }}"
+        chart_version: "{{ cert_manager_version }}"
+        values:
+          installCRDs: true
+          global:
+            leaderElection:
+              namespace: "{{ namespace_cert_manager }}"
+        wait: true
+        wait_timeout: 300s
+
+    - name: Wait Cert-Manager ready
+      command: >
+        kubectl wait pod
+        -n {{ namespace_cert_manager }}
+        -l app.kubernetes.io/instance=cert-manager
+        --for=condition=Ready
+        --timeout=180s
+
+    # ── 4. KServe (2-pass for caBundle) ──────────────────────────────────
+    - name: Apply KServe first pass
+      command: kubectl apply -f https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve.yaml
+      ignore_errors: true
+
+    - name: Wait KServe CRDs established
+      command: >
+        kubectl wait crd/inferenceservices.serving.kserve.io
+        --for=condition=established
+        --timeout=60s
+      ignore_errors: true
+
+    - name: Wait cert-manager to inject caBundle
+      pause:
+        seconds: 30
+
+    - name: Apply KServe second pass
+      command: kubectl apply -f https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve.yaml
+      ignore_errors: true
+
+    - name: Wait KServe controller ready
+      command: >
+        kubectl wait pod
+        -n {{ namespace_kserve }}
+        -l control-plane=kserve-controller-manager
+        --for=condition=Ready
+        --timeout=180s
+
+    # ── 5. Apply KServe runtime + secrets ────────────────────────────────
+    - name: Apply MLflow ClusterServingRuntime
+      command: kubectl apply -f ../../kubernetes/runtimes/mlflow-cluster-runtime.yaml
+
+    - name: Apply K8s secrets
+      command: kubectl apply -f ../../kubernetes/secrets.yaml
+
+    # ── 6. Observability stack ────────────────────────────────────────────
+    - name: Install kube-prometheus-stack
+      kubernetes.core.helm:
+        name: monitoring-stack
+        chart_ref: prometheus-community/kube-prometheus-stack
+        release_namespace: "{{ namespace_monitoring }}"
+        chart_version: "55.5.0"
+        values:
+          prometheus:
+            prometheusSpec:
+              serviceMonitorSelectorNilUsesHelmValues: false
+              retention: 7d
+              resources:
+                requests:
+                  memory: 512Mi
+                limits:
+                  memory: 1Gi
+          grafana:
+            enabled: false   # deploy separately
+          alertmanager:
+            enabled: false
+        wait: true
+        wait_timeout: 300s
+
+    - name: Install Grafana
+      kubernetes.core.helm:
+        name: grafana
+        chart_ref: grafana/grafana
+        release_namespace: "{{ namespace_monitoring }}"
+        chart_version: "7.0.19"
+        values:
+          adminPassword: admin123
+          service:
+            type: ClusterIP
+          persistence:
+            enabled: true
+            size: 2Gi
+          datasources:
+            datasources.yaml:
+              apiVersion: 1
+              datasources:
+                - name: Prometheus
+                  type: prometheus
+                  url: http://monitoring-stack-kube-prom-prometheus.monitoring.svc.cluster.local:9090
+                  isDefault: true
+                - name: Loki
+                  type: loki
+                  url: http://loki-stack.monitoring.svc.cluster.local:3100
+                - name: Jaeger
+                  type: jaeger
+                  url: http://jaeger.monitoring.svc.cluster.local:16686
+        wait: true
+        wait_timeout: 180s
+
+    - name: Install Loki stack
+      kubernetes.core.helm:
+        name: loki-stack
+        chart_ref: grafana/loki-stack
+        release_namespace: "{{ namespace_monitoring }}"
+        chart_version: "2.10.2"
+        values:
+          promtail:
+            enabled: true
+        wait: false
+
+    - name: Deploy Jaeger (allInOne)
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: jaeger
+            namespace: "{{ namespace_monitoring }}"
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: jaeger
+            template:
+              metadata:
+                labels:
+                  app: jaeger
+              spec:
+                containers:
+                  - name: jaeger
+                    image: jaegertracing/all-in-one:1.54
+                    env:
+                      - name: COLLECTOR_OTLP_ENABLED
+                        value: "true"
+                      - name: SPAN_STORAGE_TYPE
+                        value: memory
+                      - name: MEMORY_MAX_TRACES
+                        value: "10000"
+                    ports:
+                      - containerPort: 16686
+                      - containerPort: 4317
+                      - containerPort: 4318
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 256Mi
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+
+    - name: Deploy Jaeger Service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: jaeger
+            namespace: "{{ namespace_monitoring }}"
+          spec:
+            selector:
+              app: jaeger
+            ports:
+              - name: ui
+                port: 16686
+                targetPort: 16686
+              - name: otlp-grpc
+                port: 4317
+                targetPort: 4317
+              - name: otlp-http
+                port: 4318
+                targetPort: 4318
+
+    # ── 7. Deploy backend via Helm ────────────────────────────────────────
+    - name: Resolve KServe storageUri
+      command: >
+        python3 ../../scripts/resolve_storage_uri.py
+        --update-yaml ../../mlops/kserve/inference-service.yaml
+      environment:
+        MLFLOW_TRACKING_URI: "http://hallucination-mlflow:5000"
+        MLFLOW_MODEL_NAME: vihallu-detector
+        MLFLOW_MODEL_ALIAS: production
+
+    - name: Deploy hallucination-backend
+      kubernetes.core.helm:
+        name: hallucination-backend
+        chart_ref: ../../kubernetes/charts/hallucination-backend
+        release_namespace: "{{ namespace_prod }}"
+        values_files:
+          - ../../kubernetes/values/backend-prod.yaml
+        wait: true
+        wait_timeout: 300s
+
+    # ── 8. Deploy KServe InferenceService ─────────────────────────────────
+    - name: Apply KServe InferenceService
+      command: kubectl apply -f ../../mlops/kserve/inference-service.yaml
+
+    - name: Wait InferenceService ready
+      command: >
+        kubectl wait inferenceservice/hallucination-detector
+        -n {{ namespace_prod }}
+        --for=condition=Ready
+        --timeout=300s
+      ignore_errors: true
+
+    # ── 9. Final status ───────────────────────────────────────────────────
+    - name: Show all pods
+      command: kubectl get pods -A
+      register: all_pods
+
+    - name: Show InferenceService status
+      command: kubectl get inferenceservice -n {{ namespace_prod }}
+      register: isvc_status
+
+    - name: Print status
+      debug:
+        msg:
+          - "=== Pods ==="
+          - "{{ all_pods.stdout_lines }}"
+          - "=== InferenceService ==="
+          - "{{ isvc_status.stdout_lines }}"
