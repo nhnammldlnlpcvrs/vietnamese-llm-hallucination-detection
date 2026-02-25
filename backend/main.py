@@ -84,3 +84,7 @@ app.add_middleware(
 )
 
 app.include_router(predict_router, prefix="/api", tags=["Hallucination"])
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}

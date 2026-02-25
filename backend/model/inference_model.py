@@ -19,7 +19,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 MODEL_PATH = os.getenv("MODEL_PATH", "models/phobert_finetuned_model")
 PHOBERT_FINETUNED_PATH = "vinai/phobert-base"
-LGBM_PATH = os.path.join(BASE_DIR, "models/lgbm_final_fold_0.txt")
+LGBM_PATH = os.path.join(BASE_DIR, "models/lgbm/fold_0.txt")
 NLI_MODEL_NAME = "MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli"
 NER_MODEL_NAME = "undertheseanlp/vietnamese-ner-v1.4.0a2"
 VISTRAL_MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
@@ -286,7 +286,7 @@ class HallucinationPipeline:
 
         x_final = np.hstack([f_embed, f_simple, f_sim, f_nli, f_ner, f_vistral])
         
-        preds = self.lgbm_model.predict(x_final)
+        preds = self.lgbm_model.predict(x_final, predict_disable_shape_check=True)
         
         class_id = np.argmax(preds[0])
         confidence = preds[0][class_id]
@@ -344,4 +344,3 @@ def get_hallu_model() -> HallucinationPipeline:
         _pipeline_instance = HallucinationPipeline()
     return _pipeline_instance
 
-hallu_model = get_hallu_model()
