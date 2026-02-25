@@ -3,9 +3,49 @@ apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
   name: {{ .Values.model.name }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    autoscaling.knative.dev/minScale: {{ .Values.model.minReplicas | quote }}
+    autoscaling.knative.dev/maxScale: {{ .Values.model.maxReplicas | quote }}
+    autoscaling.knative.dev/target: {{ .Values.model.scaleTarget | quote }}
+    autoscaling.knative.dev/scaleToZeroGracePeriod: {{ .Values.model.scaleToZeroGracePeriod | quote }}
 spec:
   predictor:
     model:
       modelFormat:
         name: mlflow
-      storageUri: {{ .Values.mlflow.storageUri | quote }}
+        version: "1"
+      runtime: {{ .Values.model.runtime }}
+      storageUri: {{ .Values.model.storageUri | quote }}
+      resources:
+        {{- toYaml .Values.model.resources | nindent 8 }}
+      env:
+        - name: MLFLOW_TRACKING_URI
+          valueFrom:
+            secretKeyRef:
+              name: mlflow-secret
+              key: MLFLOW_TRACKING_URI
+        - name: MLFLOW_S3_ENDPOINT_URL
+          valueFrom:
+            secretKeyRef:
+              name: mlflow-secret
+              key: MLFLOW_S3_ENDPOINT_URL
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        - name: MLFLOW_S3_IGNORE_TLS
+          value: "true"
+      readinessProbe:
+        httpGet:
+          path: /v2/health/ready
+          port: 8080
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        failureThreshold: 10

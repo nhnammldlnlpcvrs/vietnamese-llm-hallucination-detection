@@ -1,9 +1,0 @@
-# gateway/nginx/custom-values.yaml
-controller:
-  replicaCount: 2
-  config:
-    use-forwarded-headers: "true"
-    enable-real-ip: "true"
-  service:
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: nlb

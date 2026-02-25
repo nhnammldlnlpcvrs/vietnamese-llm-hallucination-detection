@@ -1,21 +1,82 @@
 # kubernetes/ingress-auth.yaml
+# NGINX Ingress Controller với API Key auth
+# Requires: ingress-nginx controller installed
+
+---
+# ConfigMap cho API Key validation via Lua snippet
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-api-keys
+  namespace: hallucination-prod
+data:
+  valid_keys: "vihallu-internal-2026,vihallu-jenkins-cd-key,vihallu-dev-key-local"
+
+---
+# Ingress với NGINX annotations
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: hallucination-backend
+  name: hallucination-ingress
   namespace: hallucination-prod
   annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: basic-auth
-    nginx.ingress.kubernetes.io/auth-realm: "Authentication Required"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "3"
+    nginx.ingress.kubernetes.io/limit-connections: "5"
+
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+
+    # API Key auth via snippet
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      # Lấy danh sách keys từ ConfigMap (inject qua env hoặc hardcode)
+      set $valid_keys "vihallu-internal-2026,vihallu-jenkins-cd-key,vihallu-dev-key-local";
+      set $api_key $http_x_api_key;
+      set $key_valid 0;
+
+      # Check key
+      if ($api_key = "vihallu-internal-2026") { set $key_valid 1; }
+      if ($api_key = "vihallu-jenkins-cd-key") { set $key_valid 1; }
+      if ($api_key = "vihallu-dev-key-local")  { set $key_valid 1; }
+
+      # Bypass auth cho health/metrics
+      if ($request_uri ~* "^/(health|metrics)") { set $key_valid 1; }
+
+      if ($key_valid = 0) {
+        return 401 '{"error":"Invalid or missing API key. Pass key in X-API-Key header."}';
+      }
+
+    # CORS
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, X-API-Key"
+
 spec:
   ingressClassName: nginx
   rules:
-    - host: hallucination.api.internal
+    - host: hallucination.local
       http:
         paths:
-          - path: /
+          - path: /api
             pathType: Prefix
+            backend:
+              service:
+                name: hallucination-backend
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: hallucination-backend
+                port:
+                  number: 8000
+          - path: /metrics
+            pathType: Exact
             backend:
               service:
                 name: hallucination-backend

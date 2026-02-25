@@ -2,10 +2,16 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: hallucination-backend
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
 spec:
+  type: {{ .Values.service.type }}
   selector:
-    app: hallucination-backend
+    app: {{ .Release.Name }}
   ports:
-    - port: {{ .Values.service.port }}
+    - name: http
+      port: {{ .Values.service.port }}
       targetPort: 8000
+      protocol: TCP
