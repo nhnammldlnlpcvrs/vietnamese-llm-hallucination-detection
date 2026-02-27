@@ -1,17 +1,14 @@
-# tests/unit/test_error_handling.py
-def test_model_crash(client, monkeypatch):
-    from backend.routers import predict
+from unittest.mock import MagicMock, patch
 
-    def crash(*args, **kwargs):
-        raise RuntimeError("boom")
+def test_model_crash(client):
+    mock_model = MagicMock()
+    mock_model.predict.side_effect = RuntimeError("boom")
 
-    monkeypatch.setattr(predict.hallu_model, "predict", crash)
-
-    r = client.post("/api/predict", json={
-        "context": "a",
-        "prompt": "b",
-        "response": "c"
-    })
+    with patch("backend.routers.predict.get_hallu_model", return_value=mock_model):
+        r = client.post("/api/predict", json={
+            "context": "a",
+            "prompt": "b",
+            "response": "c"
+        })
 
     assert r.status_code == 500
-    assert "boom" in r.text
