@@ -314,6 +314,7 @@ services:
         retries: 3
 
 volumes:
+  jenkins_data:
   nginx_logs:
   postgres_data:
   minio_data:
