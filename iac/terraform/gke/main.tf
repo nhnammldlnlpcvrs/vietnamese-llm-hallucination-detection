@@ -145,8 +145,8 @@ resource "google_container_cluster" "vihallu" {
   maintenance_policy {
     recurring_window {
       start_time = "2024-01-01T20:00:00Z"  # 3AM ICT
-      end_time   = "2024-01-01T23:00:00Z"  # 6AM ICT
-      recurrence = "FREQ=WEEKLY;BYDAY=SA,SU"
+      end_time   = "2024-01-02T00:00:00Z"  # 6AM ICT
+      recurrence = "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU"
     }
   }
 }

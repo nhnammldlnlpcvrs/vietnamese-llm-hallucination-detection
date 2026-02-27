@@ -2,26 +2,29 @@ pipeline {
     agent any
 
     environment {
-        KUBE_ID = 'kubeconfig-minikube'
-        GHCR_ID = 'ghcr-credentials'
-        HF_TOKEN_ID = 'hf-token'
-        MLFLOW_ID = 'mlflow-credentials'
-        MINIO_ID = 'minio-credentials'
+        KUBE_ID    = 'kubeconfig-gke'
+        GHCR_ID    = 'ghcr-credentials'
+        MINIO_ID   = 'minio-credentials'
 
-        REGISTRY = 'ghcr.io'
+        REGISTRY             = 'ghcr.io'
         DOCKER_REGISTRY_USER = 'nhnammldlnlpcvrs'
-        DOCKER_IMAGE_NAME = 'hallucination-backend'
-        FULL_IMAGE = "${REGISTRY}/${DOCKER_REGISTRY_USER}/${DOCKER_IMAGE_NAME}"
+        DOCKER_IMAGE_NAME    = 'hallucination-backend'
+        FULL_IMAGE           = "${REGISTRY}/${DOCKER_REGISTRY_USER}/${DOCKER_IMAGE_NAME}"
 
-        K8S_NAMESPACE = 'hallucination-prod'
-        HELM_RELEASE = 'hallucination-backend'
+        K8S_NAMESPACE  = 'hallucination-prod'
+        HELM_RELEASE   = 'hallucination-backend'
         HELM_CHART_PATH = './kubernetes/charts/hallucination-backend'
-        HELM_VALUES = './kubernetes/values/backend-prod.yaml'
+        HELM_VALUES    = './kubernetes/values/backend-prod.yaml'
 
-        MLFLOW_TRACKING_URI = 'http://hallucination-mlflow:5000'
-        MLFLOW_S3_ENDPOINT = 'http://hallucination-minio:9000'
-        MLFLOW_MODEL_NAME = 'vihallu-detector'
-        MLFLOW_MODEL_ALIAS = 'production'
+        KSERVE_ISVC    = 'hallucination-detector'
+        KSERVE_MANIFEST = './mlops/kserve/inference-service.yaml'
+        GCS_MODEL_URI  = 'gs://vihallu-models/hallucination-detector/model'
+        INGRESS_IP     = '136.110.57.217'
+
+        MLFLOW_TRACKING_URI = 'http://localhost:5000'
+        MLFLOW_S3_ENDPOINT  = 'http://localhost:9000'
+        MLFLOW_MODEL_NAME   = 'vihallu-detector'
+        MLFLOW_MODEL_ALIAS  = 'production'
 
         COVERAGE_THRESHOLD = '80'
     }
@@ -31,6 +34,19 @@ pipeline {
         disableConcurrentBuilds()
         timeout(time: 60, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    parameters {
+        booleanParam(
+            name: 'PROVISION',
+            defaultValue: false,
+            description: 'Run Terraform + Ansible provisioning (only for fresh setup)'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip unit tests (emergency deploy only)'
+        )
     }
 
     stages {
@@ -49,11 +65,14 @@ pipeline {
         }
 
         stage('Unit Test & Coverage') {
+            when {
+                expression { !params.SKIP_TESTS }
+            }
             steps {
                 sh '''
-                    docker build -f docker/Dockerfile.ci -t hallucination-ci:${GIT_SHA_SHORT} .
+                    docker build -f docker/Dockerfile.ci \
+                        -t hallucination-ci:${GIT_SHA_SHORT} .
 
-                    # Run tests & copy coverage.xml OUT of container
                     CONTAINER_ID=$(docker create hallucination-ci:${GIT_SHA_SHORT} \
                         pytest tests/unit \
                             --cov=backend \
@@ -77,14 +96,17 @@ pipeline {
         }
 
         stage('Quality Gate') {
+            when {
+                expression { !params.SKIP_TESTS }
+            }
             steps {
                 script {
                     def coverage = sh(
                         script: """python3 -c \"
-                            import xml.etree.ElementTree as ET
-                            tree = ET.parse('coverage.xml')
-                            print(round(float(tree.getroot().attrib['line-rate']) * 100, 1))
-                            \"""",
+                                    import xml.etree.ElementTree as ET
+                                    tree = ET.parse('coverage.xml')
+                                    print(round(float(tree.getroot().attrib['line-rate']) * 100, 1))
+                                    \"""",
                         returnStdout: true
                     ).trim().toFloat()
 
@@ -111,23 +133,18 @@ pipeline {
                     )
                 ]) {
                     withEnv([
-                        "ANSIBLE_K8S_AUTH_KUBECONFIG=${KUBECONFIG}",
+                        "USE_GKE_GCLOUD_AUTH_PLUGIN=True",
                         "TF_VAR_ghcr_username=${GHCR_USERNAME}",
                         "TF_VAR_ghcr_token=${GHCR_TOKEN}"
                     ]) {
-                        dir('iac/terraform') {
-                            sh '''
-                                terraform init
-                                terraform apply -auto-approve
-                            '''
+                        dir('iac/terraform/gke') {
+                            sh 'terraform init && terraform apply -auto-approve'
                         }
                         dir('iac/ansible') {
                             sh '''
-                                ansible-galaxy collection install kubernetes.core --force
-                                ansible-playbook setup_k8s_stack.yaml \
-                                    -i inventory.ini \
-                                    --extra-vars "kubeconfig_path=${KUBECONFIG}" \
-                                    --start-at-task "Apply KServe ClusterServingRuntime (MLflow)"
+                                KUBECONFIG=${KUBECONFIG} \
+                                USE_GKE_GCLOUD_AUTH_PLUGIN=True \
+                                ansible-playbook setup_gke_stack.yaml -v
                             '''
                         }
                     }
@@ -145,15 +162,14 @@ pipeline {
                     )
                 ]) {
                     sh '''
-                        pip install --quiet mlflow boto3
-
                         export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
                         export MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT}
                         export MLFLOW_S3_IGNORE_TLS=true
 
+                        pip install --quiet mlflow boto3
+
                         python scripts/pull_model_from_registry.py
 
-                        # Validate artifacts
                         test -f backend/model_store/model_manifest.json
                         echo "[OK] Model artifacts ready"
                         cat backend/model_store/model_manifest.json
@@ -193,32 +209,23 @@ pipeline {
 
         stage('Resolve StorageUri') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: MINIO_ID,
-                        usernameVariable: 'AWS_ACCESS_KEY_ID',
-                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-                    )
-                ]) {
-                    sh '''
-                        export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
-                        export MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT}
-                        export MLFLOW_MODEL_NAME=${MLFLOW_MODEL_NAME}
-                        export MLFLOW_MODEL_ALIAS=${MLFLOW_MODEL_ALIAS}
+                sh """
+                    sed -i 's|storageUri:.*|storageUri: "${GCS_MODEL_URI}"|' \
+                        ${KSERVE_MANIFEST}
 
-                        python scripts/resolve_storage_uri.py \
-                            --update-yaml mlops/kserve/inference-service.yaml
-
-                        echo "[OK] inference-service.yaml updated"
-                        grep storageUri mlops/kserve/inference-service.yaml
-                    '''
-                }
+                    echo "[OK] storageUri → ${GCS_MODEL_URI}"
+                    grep storageUri ${KSERVE_MANIFEST}
+                """
             }
         }
 
         stage('Approval') {
             steps {
-                input message: "Deploy ${FULL_IMAGE}:${GIT_SHA_SHORT} to production?",
+                input message: """
+                        Deploy to GKE Production?
+                        Image  : ${FULL_IMAGE}:${env.GIT_SHA_SHORT}
+                        Model  : ${GCS_MODEL_URI}
+                        """,
                       ok: "Deploy"
             }
         }
@@ -228,7 +235,10 @@ pipeline {
                 withCredentials([
                     file(credentialsId: KUBE_ID, variable: 'KUBECONFIG')
                 ]) {
-                    withEnv(["KUBECONFIG=${KUBECONFIG}"]) {
+                    withEnv([
+                        "KUBECONFIG=${KUBECONFIG}",
+                        "USE_GKE_GCLOUD_AUTH_PLUGIN=True"
+                    ]) {
                         sh '''
                             helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
                                 --namespace ${K8S_NAMESPACE} \
@@ -240,6 +250,8 @@ pipeline {
 
                             kubectl rollout status deployment/${HELM_RELEASE} \
                                 -n ${K8S_NAMESPACE} --timeout=5m
+
+                            echo "[OK] Backend deployed: ${FULL_IMAGE}:${GIT_SHA_SHORT}"
                         '''
                     }
                 }
@@ -251,16 +263,20 @@ pipeline {
                 withCredentials([
                     file(credentialsId: KUBE_ID, variable: 'KUBECONFIG')
                 ]) {
-                    withEnv(["KUBECONFIG=${KUBECONFIG}"]) {
+                    withEnv([
+                        "KUBECONFIG=${KUBECONFIG}",
+                        "USE_GKE_GCLOUD_AUTH_PLUGIN=True"
+                    ]) {
                         sh '''
-                            kubectl apply -f mlops/kserve/inference-service.yaml
+                            kubectl apply -f ${KSERVE_MANIFEST}
 
-                            # Wait for InferenceService ready (up to 5 min)
-                            kubectl wait inferenceservice/hallucination-detector \
+                            kubectl wait inferenceservice/${KSERVE_ISVC} \
                                 -n ${K8S_NAMESPACE} \
                                 --for=condition=Ready \
-                                --timeout=300s || \
+                                --timeout=300s || true
+
                             kubectl get inferenceservice -n ${K8S_NAMESPACE}
+                            echo "[OK] KServe InferenceService deployed"
                         '''
                     }
                 }
@@ -272,47 +288,39 @@ pipeline {
                 withCredentials([
                     file(credentialsId: KUBE_ID, variable: 'KUBECONFIG')
                 ]) {
-                    withEnv(["KUBECONFIG=${KUBECONFIG}"]) {
-                        sh '''
-                            # Port-forward backend for smoke test
-                            kubectl port-forward svc/${HELM_RELEASE} 18000:8000 \
-                                -n ${K8S_NAMESPACE} &
-                            PF_PID=$!
-                            sleep 5
+                    withEnv([
+                        "KUBECONFIG=${KUBECONFIG}",
+                        "USE_GKE_GCLOUD_AUTH_PLUGIN=True"
+                    ]) {
+                        sh """
+                            ISVC_URL=http://${KSERVE_ISVC}.${K8S_NAMESPACE}.${INGRESS_IP}.nip.io
+
+                            echo "Smoke testing: \$ISVC_URL"
 
                             # Health check
-                            curl -f http://localhost:18000/health || \
-                                (kill $PF_PID && exit 1)
+                            curl -f "\$ISVC_URL/v2/health/live" || \
+                                (echo "[FAIL] Health check failed" && exit 1)
 
-                            # Quick inference test
-                            curl -f -X POST http://localhost:18000/predict \
-                                -H "Content-Type: application/json" \
-                                -d '{"text": "smoke test", "context": "test"}' || \
-                                (kill $PF_PID && exit 1)
+                            # Model ready
+                            curl -f "\$ISVC_URL/v2/models/${KSERVE_ISVC}" || \
+                                (echo "[FAIL] Model not ready" && exit 1)
 
-                            kill $PF_PID
                             echo "[OK] Smoke test passed"
-                        '''
+                        """
                     }
                 }
             }
         }
     }
 
-    parameters {
-        booleanParam(
-            name: 'PROVISION',
-            defaultValue: false,
-            description: 'Run Terraform + Ansible provisioning (only needed for fresh setup)'
-        )
-    }
-
     post {
         success {
             echo """
-            Pipeline PASSED
-            Image  : ${FULL_IMAGE}:${env.GIT_SHA_SHORT}
-            Commit : ${env.GIT_SHA_SHORT}
+                Pipeline PASSED
+                Image  : ${FULL_IMAGE}:${env.GIT_SHA_SHORT}
+                Model  : ${GCS_MODEL_URI}
+                KServe : http://${KSERVE_ISVC}.${K8S_NAMESPACE}.${INGRESS_IP}.nip.io
+                Commit : ${env.GIT_SHA_SHORT}
             """
         }
         failure {

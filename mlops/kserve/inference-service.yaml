@@ -23,7 +23,7 @@ spec:
         version: "1"
       runtime: mlflow-runtime
       # Pull model from MLflow Registry via alias
-      storageUri: "s3://vihallu-mlflow/artifacts/1/56e1f203b45f4f85beac11fba00d9a5e/artifacts/model"
+      storageUri: "gs://vihallu-models/hallucination-detector/model"
       resources:
         requests:
           cpu: "500m"

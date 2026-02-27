@@ -270,6 +270,26 @@ services:
       - ai-network
     depends_on:
       - mlflow
+  jenkins:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.jenkins
+    container_name: hallucination-jenkins
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.kube:/root/.kube:ro
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+    environment:
+      - USE_GKE_GCLOUD_AUTH_PLUGIN=True
+      - KUBECONFIG=/root/.kube/config
+    networks:
+      - ai-network
+    restart: unless-stopped
 
   nginx-gateway:
       build:
@@ -305,3 +325,4 @@ volumes:
 networks:
   ai-network:
     driver: bridge
+

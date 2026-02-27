@@ -28,9 +28,10 @@ mlruns/
 
 
 # Terraform
-**/.terraform/*
-*.tfstate
-*.tfstate.*
-crash.log
-*.tfstate*
-.terraform/
+terraform.tfvars
+iac/terraform/*.tfstate
+iac/terraform/*.tfstate.backup
+iac/terraform/gke/*.tfstate
+iac/terraform/gke/*.tfstate.backup
+iac/terraform/gke/.terraform/
+iac/terraform/gke/.terraform.lock.hcl
