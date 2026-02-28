@@ -102,11 +102,7 @@ pipeline {
             steps {
                 script {
                     def coverage = sh(
-                        script: """python3 -c \"
-                                    import xml.etree.ElementTree as ET
-                                    tree = ET.parse('coverage.xml')
-                                    print(round(float(tree.getroot().attrib['line-rate']) * 100, 1))
-                                    \"""",
+                        script: 'python3 -c "import xml.etree.ElementTree as ET; tree = ET.parse(\'coverage.xml\'); print(round(float(tree.getroot().attrib[\'line-rate\']) * 100, 1))"',
                         returnStdout: true
                     ).trim().toFloat()
 
