@@ -162,9 +162,9 @@ pipeline {
                         export MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT}
                         export MLFLOW_S3_IGNORE_TLS=true
 
-                        pip install --quiet mlflow boto3
+                        pip install --quiet --break-system-packages mlflow boto3
 
-                        python scripts/pull_model_from_registry.py
+                        python3 scripts/pull_model_from_registry.py
 
                         test -f backend/model_store/model_manifest.json
                         echo "[OK] Model artifacts ready"
