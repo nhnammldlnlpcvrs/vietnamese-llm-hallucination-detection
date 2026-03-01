@@ -31,7 +31,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 8000
+              containerPort: 8080
               protocol: TCP
 
           env:
@@ -56,7 +56,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8000
+              port: 8080
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds | default 15 }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds | default 20 }}
             failureThreshold: 3
@@ -64,7 +64,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /health
-              port: 8000
+              port: 8080
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds | default 10 }}
             periodSeconds: {{ .Values.readinessProbe.periodSeconds | default 10 }}
             failureThreshold: 3
