@@ -21,8 +21,8 @@ pipeline {
         GCS_MODEL_URI  = 'gs://vihallu-models/hallucination-detector/model'
         INGRESS_IP     = '136.110.57.217'
 
-        MLFLOW_TRACKING_URI = 'http://192.168.1.1:5000'
-        MLFLOW_S3_ENDPOINT  = 'http://192.168.1.1:9000'
+        MLFLOW_TRACKING_URI = 'http://hallucination-mlflow:5000'
+        MLFLOW_S3_ENDPOINT  = 'http://hallucination-minio:9000'
         MLFLOW_MODEL_NAME   = 'vihallu-detector'
         MLFLOW_MODEL_ALIAS  = 'production'
 
