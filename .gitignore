@@ -1,37 +1,44 @@
-# Ignore Python bytecode files
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
-__pycache__/
 
-# Ignore virtual environment directories
 venv/
 env/
-.env
 .venv/
+.env
 .vscode/
 
-# Ignore Model and result directories 
-models/phobert_finetuned_model/
-models/phobert_tokenizer/
-models/phobert
+models/
 result/
+predictions/
 
-# ignore raw data files
 data/**/*.csv
 data/**/*.json
 data/**/*.parquet
-
-# BUT keep DVC metadata
 !data/**/*.dvc
-mlruns/
 
+.dvc/cache/
+
+mlruns/
+mlflow.db
+
+.coverage
+coverage.xml
+.pytest_cache/
+
+logs/
+*.log
+
+auth-file
+*.key
+*.pem
 
 # Terraform
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+.terraform/
 terraform.tfvars
-iac/terraform/*.tfstate
-iac/terraform/*.tfstate.backup
-iac/terraform/gke/*.tfstate
-iac/terraform/gke/*.tfstate.backup
-iac/terraform/gke/.terraform/
-iac/terraform/gke/.terraform.lock.hcl
+
+.DS_Store
