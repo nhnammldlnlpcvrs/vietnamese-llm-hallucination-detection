@@ -43,3 +43,6 @@ auth-file
 terraform.tfvars
 
 .DS_Store
+
+config-for-jenkins/**/secrets*
+config-for-jenkins/**/credentials*
