@@ -29,7 +29,8 @@ coverage.xml
 
 logs/
 *.log
-
+# TLS / SSL
+*.crt
 auth-file
 *.key
 *.pem
