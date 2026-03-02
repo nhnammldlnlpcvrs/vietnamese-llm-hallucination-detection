@@ -16,7 +16,7 @@ scrape_configs:
         refresh_interval: 5s
         filters:
           - name: network
-            values: ["hallucination_ai-network"]
+            values: ["vietnamese-llm-hallucination-detection_ai-network"]
     relabel_configs:
       - source_labels: [__meta_docker_container_name]
         target_label: container

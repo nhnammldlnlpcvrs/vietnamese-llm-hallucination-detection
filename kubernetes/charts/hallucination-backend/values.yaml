@@ -37,7 +37,7 @@ envFromSecrets:
       - AWS_SECRET_ACCESS_KEY
 
 secrets:
-  create: false   # secrets managed externally via kubernetes/secrets.yaml
+  create: false  
   mlflowTrackingUri: ""
   mlflowS3EndpointUrl: ""
   awsAccessKeyId: ""

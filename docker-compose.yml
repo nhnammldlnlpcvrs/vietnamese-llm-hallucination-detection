@@ -170,9 +170,10 @@ services:
       retries: 5
 
   promtail:
-    image: grafana/promtail:2.9.0
+    image: grafana/promtail:3.0.0
     container_name: hallucination-promtail
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./observability/loki/promtail-local.yaml:/etc/promtail/promtail.yaml:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/promtail.yaml
@@ -232,7 +233,7 @@ services:
     container_name: hallucination-evidently
     build:
       context: ./observability/evidently
-      dockerfile: docker/Dockerfile.nginx
+      dockerfile: Dockerfile
     ports:
       - "8001:8001"
     environment:
