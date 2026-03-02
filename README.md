@@ -76,6 +76,8 @@ This project presents a **Vietnamese Hallucination Detection System** designed t
 
 ### Dataset & Input Format
 
+***Data Sources**: UIT Data Science Challenge 2025.*
+
 Each data sample contains the following fields:
 
 | Field | Description |
@@ -347,19 +349,23 @@ curl http://localhost:5000/health # response: OK
 
 MLflow UI at `http://localhost:5000`:
 
-> *(Screenshot: MLflow — experiment runs and metrics)*
+MLflow Experiment:
+![MLflow-experiment](imgs/mlflow-experiments.png)
 
-> *(Screenshot: MLflow — model registry, vihallu-detector with production alias)*
+MLflow Model registry
+![MLflow-model-registry](imgs/mlflow-registry.png)
 
 MinIO UI at `http://localhost:9001` (minioadmin / minioadmin):
 
-> *(Screenshot: MinIO — bucket browser showing model artifacts)*
+![Minio](imgs/minio-buckets.png)
 
 **Start backend:**
 ```bash
 docker compose up -d backend
 # Backend available at http://localhost:8080
 ```
+FastAPI UI:
+![FastAPI](imgs/backend.png)
 
 **Start observability stack:**
 ```bash
@@ -369,13 +375,17 @@ docker compose up -d prometheus grafana loki promtail jaeger
 # Jaeger: http://localhost:16686
 ```
 
-> *(Screenshot: Grafana — prediction distribution dashboard)*
+Grafana — prediction distribution dashboard:
+![Grafana](imgs/grafana-dashboards.png)
 
-> *(Screenshot: Prometheus — scrape targets all UP)*
+Prometheus — scrape targets all UP:
+![Prometheus](imgs/prometheus-targets.png)
 
-> *(Screenshot: Loki — backend log explorer)*
+Loki — backend log explorer:
+![Loki](imgs/grafana-loki.png)
 
-> *(Screenshot: Jaeger — distributed trace for /api/predict)*
+Jaeger — distributed trace for /api/predict:
+![Jaeger](imgs/jaeger-trace.png)
 
 **Start NGINX API Gateway:**
 ```bash
@@ -385,7 +395,7 @@ docker compose up -d nginx-gateway
 
 ---
 
-### 2. GKE Deployment (Terraform + Ansible)
+### 2. GKE Deployment (Terraform & Ansible)
 
 **Configure GCP credentials:**
 ```bash
@@ -405,9 +415,8 @@ terraform plan
 terraform apply
 ```
 
-> *(Screenshot: GCP Console — GKE cluster vihallu-cluster, 2 nodes Ready)*
-
-> *(Screenshot: Terraform apply — resources created successfully)*
+GCP Console — GKE cluster vihallu-cluster, 2 nodes Ready:
+![GCP](imgs/gke-cluster.png)
 
 **Connect to cluster:**
 ```bash
@@ -430,7 +439,8 @@ gsutil uniformbucketlevelaccess set on gs://vihallu-models
 gsutil iam ch allUsers:objectViewer gs://vihallu-models
 ```
 
-> *(Screenshot: GCS Console — vihallu-models/hallucination-detector/model/)*
+GCS Console — vihallu-models/hallucination-detector/model/: 
+![GCS](imgs/gcs-bucket.png)
 
 **Deploy InferenceService:**
 ```bash
@@ -439,7 +449,8 @@ kubectl apply -f mlops/kserve/inference-service.yaml
 kubectl get inferenceservice -n hallucination-prod
 ```
 
-> *(Screenshot: kubectl get inferenceservice — hallucination-detector READY True)*
+Kserve READY:
+![Kserve](imgs/kserve-ready.png)
 
 **Deploy Backend via Helm:**
 ```bash
@@ -452,33 +463,32 @@ helm upgrade --install hallucination-backend \
   --wait --timeout=10m
 ```
 
-> *(Screenshot: kubectl get pods -n hallucination-prod — all pods 2/2 Running)*
+All pods 2/2 Running:
+![pods](imgs/pods-running.png)
 
 ---
 
 ### 3. CI/CD Pipeline
 
 **GitHub Actions CI** triggers on push to `feature*` and `main`:
-```
-Push → Unit Tests → Quality Gate (coverage > 80%) → Build & Push Image → Trigger Jenkins
-```
+![CI](imgs/ci-pipeline.png)
 
 **Jenkins CD** (triggered by GitHub Actions on merge to `main`):
-```
-Checkout → Test → Pull Model → Build Image → Resolve StorageUri → Approval → Deploy Backend → Deploy KServe → Smoke Test
-```
+![CD](imgs/cd-pipeline.png)
 
 **Setup Jenkins:**
 ```bash
 docker compose up -d jenkins
 docker exec hallucination-jenkins \
   cat /var/jenkins_home/secrets/initialAdminPassword
-# → open http://localhost:8080
+# Open http://localhost:8080
 ```
 
-> *(Screenshot: Jenkins — CD pipeline all stages green)*
+GitHub Actions — CI pipeline passed:
+![Github](imgs/github-actions.png)
 
-> *(Screenshot: GitHub Actions — CI pipeline passed)*
+Jenkins — CD pipeline all stages green:
+![Jenkins](imgs/jenkins-pipeline.png)
 
 **Required Jenkins credentials:**
 
@@ -528,15 +538,17 @@ dvc repro
 
 **Pipeline stages:**
 ```
-preprocess → feature_extraction → train_folds → evaluate → register_model
+preprocess -> feature_extraction -> train_folds -> evaluate -> register_model
 ```
+DVC dag — pipeline dependency graph:
+![DVC](imgs/dvc-dag.png)
 
-> *(Screenshot: DVC dag — pipeline dependency graph)*
-
-> *(Screenshot: MLflow — experiment runs comparing fold metrics)*
+MLflow — experiment runs comparing fold metrics:
+![MLflow](imgs/mlflow-metric.png)
 
 **Model performance (OOF):**
 - F1 Score: **0.8638**
+
 - Model: `vihallu-detector` v2
 - Alias: `production`
 
@@ -545,7 +557,8 @@ preprocess → feature_extraction → train_folds → evaluate → register_mode
 python scripts/auto_promote_registry.py
 ```
 
-> *(Screenshot: MLflow model registry — production alias set on v2)*
+MLflow model registry — production alias set on v2:
+![MLflow](imgs/mlflow-registry.png)
 
 ---
 
@@ -578,6 +591,7 @@ curl -X POST http://localhost:8080/api/predict \
 
 **Labels:**
 - `intrinsic` — Model contradicts information present in the context
+
 - `extrinsic` — Model introduces information not present in the context
 - `none` — No hallucination detected
 
@@ -601,20 +615,9 @@ curl $ISVC_URL/v2/models/hallucination-detector
 | MLflow | http://localhost:5000 | ClusterIP |
 | Evidently | http://localhost:8001 | — |
 
-**Grafana credentials:** `admin / admin`
-
-> *(Screenshot: Grafana — request latency p50/p95/p99)*
-
-> *(Screenshot: Grafana — prediction label distribution over time)*
-
-> *(Screenshot: Grafana — KServe autoscaling metrics)*
-
-> *(Screenshot: Jaeger — end-to-end trace for a single predict request)*
-
-> *(Screenshot: Evidently — data drift detection report)*
-
 **Key metrics tracked:**
 - Request latency (p50, p95, p99)
+
 - Prediction distribution per label
 - Model confidence score distribution
 - Data drift (Evidently)
@@ -638,6 +641,7 @@ curl $ISVC_URL/v2/models/hallucination-detector
 
 **GKE cluster info:**
 - Cluster: `vihallu-cluster`
+
 - Region: `asia-southeast1`, Zone: `asia-southeast1-a`
 - Node type: `e2-standard-4` (4 vCPU, 16 GB RAM)
 - Autoscaling: 1–4 nodes

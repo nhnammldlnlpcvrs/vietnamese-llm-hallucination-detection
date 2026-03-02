@@ -62,7 +62,7 @@ services:
     container_name: hallucination-mlflow
     build:
       context: mlops/mlflow
-      dockerfile: docker/Dockerfile.nginx
+      dockerfile: Dockerfile
     ports:
       - "5000:5000"
     depends_on:
