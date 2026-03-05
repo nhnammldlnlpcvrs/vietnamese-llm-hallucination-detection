@@ -27,7 +27,7 @@
 
 ## System Architecture
 
-> *(System architecture diagram — coming soon)*
+![System](imgs/overview.png)
 
 ### Inference Flow
 
