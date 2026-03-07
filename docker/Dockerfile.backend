@@ -27,8 +27,9 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements-serving.txt
 
 COPY backend backend
-
 RUN mkdir -p /app/models
+
+COPY models models
 
 EXPOSE 8080
 

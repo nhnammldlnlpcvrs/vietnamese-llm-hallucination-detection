@@ -29,6 +29,33 @@
 
 ![System](imgs/overview.png)
 ---
+## Production Deployment Status
+
+The system has been successfully deployed to Google Cloud production infrastructure.
+
+### Cluster Information
+
+| Property | Value |
+|--------|------|
+| Cluster | vihallu-cluster |
+| Region | asia-southeast1 |
+| Node Count | 2 |
+| Node Type | e2-standard-4 |
+| Kubernetes Version | v1.34 |
+
+### Database Backend
+
+MLflow uses a managed PostgreSQL instance hosted on **Google Cloud SQL**.
+
+![Cloud-SQL](imgs/cloud-sql.png)
+
+| Property | Value |
+|--------|------|
+| Instance | mlflow-postgres-vihallu-llm-detect |
+| Version | PostgreSQL 15 |
+| Region | asia-southeast1 |
+| Tier | db-f1-micro |
+| Storage | SSD |
 
 ## Tech Stack
 

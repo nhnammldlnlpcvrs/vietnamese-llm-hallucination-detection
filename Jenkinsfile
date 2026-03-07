@@ -151,25 +151,29 @@ pipeline {
         stage('Pull Model Artifacts') {
             steps {
                 withCredentials([
-                    usernamePassword(
-                        credentialsId: MINIO_ID,
-                        usernameVariable: 'AWS_ACCESS_KEY_ID',
-                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-                    )
+                    file(credentialsId: KUBE_ID, variable: 'KUBECONFIG')
                 ]) {
-                    sh '''
-                        export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
-                        export MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT}
-                        export MLFLOW_S3_IGNORE_TLS=true
+                    withEnv([
+                        "KUBECONFIG=${KUBECONFIG}",
+                        "USE_GKE_GCLOUD_AUTH_PLUGIN=True"
+                    ]) {
+                        sh '''
+                            export MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
+                            export MLFLOW_S3_IGNORE_TLS=true
 
-                        pip install --quiet --break-system-packages mlflow boto3
+                            pip install --quiet --break-system-packages mlflow boto3 google-cloud-storage
 
-                        python3 scripts/pull_model_from_registry.py
+                            python3 scripts/pull_model_from_registry.py
 
-                        test -f backend/model_store/model_manifest.json
-                        echo "[OK] Model artifacts ready"
-                        cat backend/model_store/model_manifest.json
-                    '''
+                            # Upload to GCS instead of embedding
+                            echo "[INFO] Uploading models to GCS..."
+                            gsutil -m cp -r backend/model_store/* \
+                            gs://${GCS_BUCKET}/hallucination-detector/
+
+                            echo "[OK] Models ready in GCS"
+                            gsutil ls -r gs://${GCS_BUCKET}/hallucination-detector/
+                        '''
+                    }
                 }
             }
         }
@@ -203,15 +207,33 @@ pipeline {
             }
         }
 
-        stage('Resolve StorageUri') {
+        stage('Build & Push Image') {
             steps {
-                sh """
-                    sed -i 's|storageUri:.*|storageUri: "${GCS_MODEL_URI}"|' \
-                        ${KSERVE_MANIFEST}
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: GHCR_ID,
+                        usernameVariable: 'GHCR_USERNAME',
+                        passwordVariable: 'GHCR_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        echo "${GHCR_TOKEN}" | docker login ghcr.io \
+                            -u "${GHCR_USERNAME}" --password-stdin
 
-                    echo "[OK] storageUri → ${GCS_MODEL_URI}"
-                    grep storageUri ${KSERVE_MANIFEST}
-                """
+                        docker build \
+                            -f docker/Dockerfile.backend \
+                            -t ${FULL_IMAGE}:${GIT_SHA_SHORT} \
+                            -t ${FULL_IMAGE}:latest \
+                            --build-arg GIT_SHA=${GIT_SHA_SHORT} \
+                            .
+                            # Note: No models copied (loading from GCS at runtime)
+
+                        docker push ${FULL_IMAGE}:${GIT_SHA_SHORT}
+                        docker push ${FULL_IMAGE}:latest
+
+                        echo "[OK] Pushed ${FULL_IMAGE}:${GIT_SHA_SHORT}"
+                    '''
+                }
             }
         }
 
