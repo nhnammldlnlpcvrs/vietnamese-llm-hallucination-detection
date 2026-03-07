@@ -1,4 +1,3 @@
-# backend/model/inference_model.py
 import os
 import numpy as np
 from dotenv import load_dotenv
@@ -151,7 +150,7 @@ class HallucinationPipeline:
         return np.array([[new_entity_count, overlap_ratio]])
 
     def _get_nli_features(self, context, response):
-        import torch # Lazy import reference
+        import torch
 
         premise = context if context else "no context"
         hypothesis = response if response else "no response"
@@ -257,7 +256,6 @@ class HallucinationPipeline:
         if not self._is_loaded:
             self._load_models()
 
-        # lazy import
         from sklearn.metrics.pairwise import cosine_similarity
         
         print("\n--- PROCESSING REQUEST (GUARDRAIL V3: EXTRINSIC HUNTER) ---")
@@ -293,7 +291,6 @@ class HallucinationPipeline:
         original_label = self.labels.get(int(class_id), "Unknown")
         print(f"- [LightGBM Opinion] Label: {original_label} ({confidence:.4f})")
 
-        # logic rules
         if p_contra > 0.5:
             print("GUARDRAIL: NLI Contradiction cao -> Force Intrinsic")
             return {
@@ -335,7 +332,6 @@ class HallucinationPipeline:
             "confidence": float(confidence)
         }
     
-# Singleton Instance
 _pipeline_instance = None
 
 def get_hallu_model() -> HallucinationPipeline:

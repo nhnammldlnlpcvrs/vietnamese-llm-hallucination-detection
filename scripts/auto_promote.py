@@ -1,10 +1,4 @@
 # scripts/auto_promote.py
-"""
-auto_promote.py
-Lightweight promote helper — wraps auto_promote_registry with env-var gates.
-Can be called from CI/CD after training to conditionally promote.
-Usage: python scripts/auto_promote.py --min-f1 0.75
-"""
 
 import argparse
 import os

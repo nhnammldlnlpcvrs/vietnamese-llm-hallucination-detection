@@ -1,4 +1,3 @@
-# iac/ansible/setup_k8s_stack.yaml
 ---
 - name: Provision MLOps & Observability Stack
   hosts: localhost

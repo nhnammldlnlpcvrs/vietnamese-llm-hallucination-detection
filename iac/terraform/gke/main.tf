@@ -24,7 +24,6 @@ terraform {
   # }
 }
 
-# ── Variables ────────────────────────────────────────────────────────────────
 variable "project_id" {
   type        = string
   description = "GCP Project ID"
@@ -78,14 +77,12 @@ variable "minio_secret_key" {
   sensitive = true
 }
 
-# ── Provider ─────────────────────────────────────────────────────────────────
 provider "google" {
   project = var.project_id
   region  = var.region
   zone    = var.zone
 }
 
-# ── VPC Network ──────────────────────────────────────────────────────────────
 resource "google_compute_network" "vihallu_vpc" {
   name                    = "${var.cluster_name}-vpc"
   auto_create_subnetworks = false
@@ -108,7 +105,6 @@ resource "google_compute_subnetwork" "vihallu_subnet" {
   }
 }
 
-# ── GKE Cluster ──────────────────────────────────────────────────────────────
 resource "google_container_cluster" "vihallu" {
   name     = var.cluster_name
   location = var.zone
@@ -151,7 +147,6 @@ resource "google_container_cluster" "vihallu" {
   }
 }
 
-# ── Node Pool ────────────────────────────────────────────────────────────────
 resource "google_container_node_pool" "vihallu_nodes" {
   name       = "${var.cluster_name}-node-pool"
   location   = var.zone
@@ -193,7 +188,6 @@ resource "google_container_node_pool" "vihallu_nodes" {
   }
 }
 
-# ── Kubernetes Provider (uses GKE cluster) ───────────────────────────────────
 data "google_client_config" "default" {}
 
 provider "kubernetes" {
@@ -204,7 +198,6 @@ provider "kubernetes" {
   )
 }
 
-# ── Namespaces ───────────────────────────────────────────────────────────────
 resource "kubernetes_namespace" "hallucination_prod" {
   metadata {
     name = "hallucination-prod"
@@ -222,7 +215,6 @@ resource "kubernetes_namespace" "monitoring" {
   depends_on = [google_container_node_pool.vihallu_nodes]
 }
 
-# ── GHCR Pull Secret ─────────────────────────────────────────────────────────
 resource "kubernetes_secret" "ghcr" {
   metadata {
     name      = "ghcr-secret"
@@ -244,7 +236,6 @@ resource "kubernetes_secret" "ghcr" {
   }
 }
 
-# ── MLflow Secret ─────────────────────────────────────────────────────────────
 resource "kubernetes_secret" "mlflow" {
   metadata {
     name      = "mlflow-secret"
@@ -259,7 +250,6 @@ resource "kubernetes_secret" "mlflow" {
   }
 }
 
-# ── MinIO/AWS Secret ──────────────────────────────────────────────────────────
 resource "kubernetes_secret" "aws" {
   metadata {
     name      = "aws-credentials"
@@ -275,7 +265,6 @@ resource "kubernetes_secret" "aws" {
   }
 }
 
-# ── Outputs ───────────────────────────────────────────────────────────────────
 output "cluster_name" {
   value = google_container_cluster.vihallu.name
 }

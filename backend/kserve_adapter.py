@@ -1,4 +1,3 @@
-# backend/kserve_adapter.py
 import kserve
 from typing import Dict
 
@@ -10,9 +9,6 @@ class HallucinationTransformer(kserve.Model):
         self.ready = True
 
     def preprocess(self, inputs: Dict) -> Dict:
-        """Parse KServe v2 input format → backend format."""
-        # KServe v2 format:
-        # {"inputs": [{"name": "context", "data": ["..."]}, ...]}
         parsed = {}
         for inp in inputs.get("inputs", []):
             parsed[inp["name"]] = inp["data"][0]
@@ -24,8 +20,6 @@ class HallucinationTransformer(kserve.Model):
         }
 
     def postprocess(self, outputs: Dict) -> Dict:
-        """Parse predictor output → KServe v2 response format."""
-        # outputs từ mlserver: {"predictions": [{"label": "no", "confidence": 0.95}]}
         prediction = outputs.get("predictions", [{}])[0]
         return {
             "outputs": [

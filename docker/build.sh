@@ -1,10 +1,6 @@
 # docker/build.sh
 #!/bin/sh
 # mlops/mlflow/entrypoint.sh
-# Selects artifact root at runtime:
-#   - If MLFLOW_S3_BUCKET is set  → s3://bucket/artifacts
-#   - If MLFLOW_GCS_BUCKET is set → gs://bucket/artifacts
-#   - Otherwise                   → /mlflow/artifacts (requires PV mount in K8s)
 
 set -e
 

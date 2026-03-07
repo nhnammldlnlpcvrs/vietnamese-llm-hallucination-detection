@@ -1,4 +1,3 @@
-# backend/main.py
 import os
 import time
 import sys
@@ -7,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.routers.predict import router as predict_router
 from loguru import logger
 
-# Monitoring and Tracing
 from prometheus_fastapi_instrumentator import Instrumentator
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource

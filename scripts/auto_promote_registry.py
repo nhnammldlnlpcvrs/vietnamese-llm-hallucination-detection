@@ -1,9 +1,4 @@
 # scripts/auto_promote_registry.py
-"""
-auto_promote_registry.py
-Find best MLflow run → register model → set 'production' alias.
-"""
-
 import os
 import time
 import mlflow

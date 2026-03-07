@@ -1,4 +1,3 @@
-# iac/ansible/setup_gke_stack.yaml
 - name: Setup GKE Stack
   hosts: localhost
   connection: local

@@ -1,10 +1,3 @@
-# backend/model/mlflow_loader.py
-"""
-backend/model/mlflow_loader.py
-Load the 'production' alias model from MLflow Registry at startup.
-Uses Model Aliases (not deprecated Stages) for MLflow >= 2.9 compatibility.
-"""
-
 import os
 import mlflow
 import mlflow.pyfunc
@@ -12,7 +5,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Must match MODEL_NAME used in auto_promote_registry.py + pull_model_from_registry.py
 MODEL_NAME  = os.getenv("MLFLOW_MODEL_NAME", "vihallu-detector")
 MODEL_ALIAS = os.getenv("MLFLOW_MODEL_ALIAS", "production")
 
@@ -20,10 +12,6 @@ _model = None
 
 
 def load_model_from_mlflow():
-    """
-    Load model on first call, cache for subsequent calls.
-    model_uri: models:/<name>@<alias>  — resolves via MLflow alias registry.
-    """
     global _model
     if _model is not None:
         return _model
@@ -55,5 +43,4 @@ def load_model_from_mlflow():
 
 
 def get_model():
-    """Convenience alias used by routers."""
     return load_model_from_mlflow()

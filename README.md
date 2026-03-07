@@ -28,11 +28,6 @@
 ## System Architecture
 
 ![System](imgs/overview.png)
-
-### Inference Flow
-
-> *(Inference flow diagram — coming soon)*
-
 ---
 
 ## Tech Stack
@@ -138,6 +133,9 @@ To effectively detect and classify hallucinations, this project proposes a **mul
 
 ![Model Design](imgs/model-design.png)
 
+### Training Pipeline
+
+![Training](imgs/training-pipeline.png)
 ### Feature Groups
 
 **1. Fine-tuned Qwen2.5-1.5B Embeddings**

@@ -1,4 +1,3 @@
-// frontend/src/routes/page.svelte.spec.ts
 import { page } from '@vitest/browser/context';
 import { describe, it, expect } from 'vitest';
 import { render } from 'vitest-browser-svelte';

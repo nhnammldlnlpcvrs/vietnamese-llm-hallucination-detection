@@ -1,4 +1,3 @@
-# backend/schemas/hallu_input.py
 from pydantic import BaseModel
 
 class HalluInput(BaseModel):

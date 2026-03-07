@@ -1,6 +1,3 @@
-# iac/ansible/values-mlflow.yaml
-# Helm chart: community-charts/mlflow
-
 image:
   repository: ghcr.io/mlflow/mlflow
   tag: "v2.11.3"
