@@ -1,4 +1,4 @@
-# iac/terraform/gke/cloud_sql.tf (FIXED)
+# iac/terraform/gke/cloud_sql.tf
 
 resource "google_sql_database_instance" "mlflow_postgres" {
   name                = "mlflow-postgres-${var.project_id}"
