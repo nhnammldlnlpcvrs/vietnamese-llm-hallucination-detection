@@ -47,4 +47,8 @@ terraform.tfvars
 config-for-jenkins/**/secrets*
 config-for-jenkins/**/credentials*
 config_flat
-auth-file
+auth-file.venv_mlflow/
+models/
+backend/model_store/
+*.pth
+*.pkl
