@@ -1,0 +1,36 @@
+apiVersion: serving.kserve.io/v1alpha1
+kind: ClusterServingRuntime
+metadata:
+  name: mlflow-runtime
+spec:
+  supportedModelFormats:
+    - name: mlflow
+      version: "1"
+      autoSelect: true
+  protocolVersions:
+    - v2
+  containers:
+    - name: kserve-container
+      image: docker.io/seldonio/mlserver:1.5.0
+      env:
+        - name: MLSERVER_HTTP_PORT
+          value: "8080"
+        - name: MLSERVER_GRPC_PORT
+          value: "8081"
+        - name: MLSERVER_MODEL_IMPLEMENTATION
+          value: "mlserver_mlflow.MLflowRuntime"
+        - name: MLSERVER_MODEL_URI
+          value: "/mnt/models"
+        - name: MLSERVER_MODEL_NAME
+          value: "hallucination-detector"
+        - name: MLFLOW_S3_IGNORE_TLS
+          value: "true"
+        - name: AWS_DEFAULT_REGION
+          value: "ap-southeast-1"
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "1"
+          memory: "2Gi"

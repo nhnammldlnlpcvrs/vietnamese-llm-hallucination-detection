@@ -1,0 +1,358 @@
+- name: Setup GKE Stack
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    kserve_version: "v0.11.0"
+    cert_manager_version: "v1.14.5"
+    namespace_prod: "hallucination-prod"
+    namespace_monitoring: "monitoring"
+    namespace_kserve: "kserve"
+    namespace_cert_manager: "cert-manager"
+
+  environment:
+    KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+    USE_GKE_GCLOUD_AUTH_PLUGIN: "True"
+
+  tasks:
+
+    - name: Verify kubectl connected to GKE
+      command: kubectl cluster-info
+      register: cluster_info
+
+    - name: Show cluster info
+      debug:
+        msg: "{{ cluster_info.stdout_lines[0] }}"
+
+    - name: Add Helm repositories
+      command: helm repo add {{ item.name }} {{ item.url }}
+      loop:
+        - { name: jetstack,             url: "https://charts.jetstack.io" }
+        - { name: prometheus-community, url: "https://prometheus-community.github.io/helm-charts" }
+        - { name: grafana,              url: "https://grafana.github.io/helm-charts" }
+        - { name: jaegertracing,        url: "https://jaegertracing.github.io/helm-charts" }
+      ignore_errors: true
+
+    - name: Update Helm repositories
+      command: helm repo update
+
+    - name: Create namespaces
+      shell: kubectl create namespace {{ item }} --dry-run=client -o yaml | kubectl apply -f -
+      loop:
+        - "{{ namespace_prod }}"
+        - "{{ namespace_monitoring }}"
+        - "{{ namespace_kserve }}"
+        - "{{ namespace_cert_manager }}"
+      ignore_errors: true
+
+    - name: Install Cert-Manager
+      command: >
+        helm upgrade --install cert-manager jetstack/cert-manager
+        --namespace {{ namespace_cert_manager }}
+        --version {{ cert_manager_version }}
+        --set installCRDs=true
+        --wait --timeout 300s
+
+    - name: Wait Cert-Manager ready
+      command: >
+        kubectl wait pod -n {{ namespace_cert_manager }}
+        -l app.kubernetes.io/instance=cert-manager
+        --for=condition=Ready --timeout=180s
+
+    - name: Apply KServe first pass
+      command: kubectl apply -f https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve.yaml
+      ignore_errors: true
+
+    - name: Wait KServe CRDs established
+      command: kubectl wait crd/inferenceservices.serving.kserve.io --for=condition=established --timeout=60s
+      ignore_errors: true
+
+    - name: Wait cert-manager to inject caBundle
+      pause:
+        seconds: 60
+
+    - name: Apply KServe second pass
+      command: kubectl apply -f https://github.com/kserve/kserve/releases/download/{{ kserve_version }}/kserve.yaml
+      ignore_errors: true
+
+    - name: Wait KServe controller ready
+      command: >
+        kubectl wait pod -n {{ namespace_kserve }}
+        -l control-plane=kserve-controller-manager
+        --for=condition=Ready --timeout=300s
+      ignore_errors: true
+
+    - name: Apply MLflow ClusterServingRuntime
+      command: kubectl apply -f ../../kubernetes/runtimes/mlflow-cluster-runtime.yaml
+
+    - name: Apply K8s secrets
+      command: kubectl apply -f ../../kubernetes/secrets.yaml
+
+    - name: Install kube-prometheus-stack
+      command: >
+        helm upgrade --install monitoring-stack
+        prometheus-community/kube-prometheus-stack
+        --namespace {{ namespace_monitoring }}
+        --version 55.5.0
+        --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false
+        --set prometheus.prometheusSpec.retention=7d
+        --set grafana.enabled=false
+        --set alertmanager.enabled=false
+        --wait --timeout 300s
+
+    - name: Install Grafana
+      command: >
+        helm upgrade --install grafana grafana/grafana
+        --namespace {{ namespace_monitoring }}
+        --version 7.0.19
+        --set adminPassword=admin123
+        --set persistence.enabled=true
+        --set persistence.size=2Gi
+        --wait --timeout 180s
+    - name: Add MLflow Helm repo
+  command: helm repo add mlflow-community https://community-helm-charts.github.io/mlflow
+
+    - name: Create MLflow values file
+      copy:
+        content: |
+          replicaCount: 1
+          
+          image:
+            repository: ghcr.io/mlflow/mlflow
+            tag: v2.11.3
+            pullPolicy: IfNotPresent
+          
+          service:
+            type: ClusterIP
+            port: 5000
+            targetPort: 5000
+          
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          
+          persistence:
+            enabled: true
+            size: 10Gi
+            storageClassName: standard
+          
+          postgres:
+            enabled: false  # Use external Cloud SQL
+            host: "127.0.0.1"
+            port: 5432
+            database: "mlflow"
+            username: "mlflow"
+            password: ""  # From K8s secret
+          
+          gcs:
+            enabled: true
+            bucket: "vihallu-models"
+          
+          env:
+            - name: MLFLOW_BACKEND_STORE_URI
+              value: "postgresql://mlflow:$(DB_PASS)@127.0.0.1:5432/mlflow"
+            - name: MLFLOW_DEFAULT_ARTIFACT_ROOT
+              value: "gs://vihallu-models"
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-db-secret
+                  key: DB_PASS
+        dest: /tmp/mlflow-values.yaml
+
+    - name: Install MLflow Server
+      command: >
+        helm upgrade --install mlflow mlflow-community/mlflow
+        --namespace {{ namespace_prod }}
+        --version 0.7.0
+        -f /tmp/mlflow-values.yaml
+        --wait --timeout 300s
+      ignore_errors: true
+
+    - name: Deploy Cloud SQL Auth Proxy Sidecar (Alternative)
+      shell: |
+        cat <<EOF | kubectl apply -f -
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: mlflow
+          namespace: {{ namespace_prod }}
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: mlflow
+          template:
+            metadata:
+              labels:
+                app: mlflow
+            spec:
+              serviceAccountName: cloud-sql-proxy-sa
+              containers:
+                # Cloud SQL Auth Proxy sidecar
+                - name: cloud-sql-proxy
+                  image: gcr.io/cloudsql-docker/cloud-sql-proxy:2.6.0
+                  args:
+                    - "--instances=$(INSTANCE_CONNECTION_NAME)=tcp:5432"
+                  env:
+                    - name: INSTANCE_CONNECTION_NAME
+                      value: "{{ gcp_project }}:{{ gcp_region }}:mlflow-postgres-{{ gcp_project }}"
+                  securityContext:
+                    runAsNonRoot: true
+                
+                # MLflow container
+                - name: mlflow
+                  image: ghcr.io/mlflow/mlflow:v2.11.3
+                  ports:
+                    - containerPort: 5000
+                  env:
+                    - name: MLFLOW_BACKEND_STORE_URI
+                      value: "postgresql://mlflow:$(DB_PASS)@127.0.0.1:5432/mlflow"
+                    - name: MLFLOW_DEFAULT_ARTIFACT_ROOT
+                      value: "gs://vihallu-models"
+                    - name: DB_PASS
+                      valueFrom:
+                        secretKeyRef:
+                          name: mlflow-db-secret
+                          key: DB_PASS
+                  resources:
+                    requests:
+                      cpu: 250m
+                      memory: 512Mi
+                    limits:
+                      cpu: 500m
+                      memory: 1Gi
+                  livenessProbe:
+                    httpGet:
+                      path: /health
+                      port: 5000
+                    initialDelaySeconds: 30
+                    periodSeconds: 10
+                  readinessProbe:
+                    httpGet:
+                      path: /health
+                      port: 5000
+                    initialDelaySeconds: 20
+                    periodSeconds: 5
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: mlflow
+          namespace: {{ namespace_prod }}
+        spec:
+          selector:
+            app: mlflow
+          type: ClusterIP
+          ports:
+            - port: 5000
+              targetPort: 5000
+        EOF
+
+    - name: Wait MLflow ready
+      command: >
+        kubectl wait pod -n {{ namespace_prod }}
+        -l app=mlflow
+        --for=condition=Ready --timeout=300s
+      ignore_errors: true
+  
+    - name: Install Loki stack
+      command: >
+        helm upgrade --install loki-stack grafana/loki-stack
+        --namespace {{ namespace_monitoring }}
+        --version 2.10.2
+        --set promtail.enabled=true
+      ignore_errors: true
+
+    - name: Deploy Jaeger allInOne
+      shell: |
+        cat <<EOF | kubectl apply -f -
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: jaeger
+          namespace: {{ namespace_monitoring }}
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: jaeger
+          template:
+            metadata:
+              labels:
+                app: jaeger
+            spec:
+              containers:
+                - name: jaeger
+                  image: jaegertracing/all-in-one:1.54
+                  env:
+                    - name: COLLECTOR_OTLP_ENABLED
+                      value: "true"
+                    - name: SPAN_STORAGE_TYPE
+                      value: memory
+                    - name: MEMORY_MAX_TRACES
+                      value: "10000"
+                  ports:
+                    - containerPort: 16686
+                    - containerPort: 4317
+                    - containerPort: 4318
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 256Mi
+                    limits:
+                      cpu: 500m
+                      memory: 512Mi
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: jaeger
+          namespace: {{ namespace_monitoring }}
+        spec:
+          selector:
+            app: jaeger
+          ports:
+            - name: ui
+              port: 16686
+              targetPort: 16686
+            - name: otlp-grpc
+              port: 4317
+              targetPort: 4317
+            - name: otlp-http
+              port: 4318
+              targetPort: 4318
+        EOF
+
+    - name: Apply KServe InferenceService
+      command: kubectl apply -f ../../mlops/kserve/inference-service.yaml
+      ignore_errors: true
+
+    - name: Wait InferenceService ready
+      command: >
+        kubectl wait inferenceservice/hallucination-detector
+        -n {{ namespace_prod }}
+        --for=condition=Ready --timeout=300s
+      ignore_errors: true
+
+    - name: Show all pods
+      command: kubectl get pods -A
+      register: all_pods
+
+    - name: Show InferenceService status
+      command: kubectl get inferenceservice -n {{ namespace_prod }}
+      register: isvc_status
+      ignore_errors: true
+
+    - name: Print status
+      debug:
+        msg:
+          - "Pods"
+          - "{{ all_pods.stdout_lines }}"
+          - "InferenceService"
+          - "{{ isvc_status.stdout_lines }}"

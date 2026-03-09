@@ -1,0 +1,70 @@
+# kubernetes/charts/hallucination-backend/values.yaml
+replicaCount: 2
+
+image:
+  repository: ghcr.io/nhnammldlnlpcvrs/hallucination-backend
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
+
+env:
+  ENVIRONMENT: production
+  LOG_LEVEL: info
+  MLFLOW_MODEL_NAME: vihallu-detector
+  MLFLOW_MODEL_ALIAS: production
+  OTEL_SERVICE_NAME: hallucination-backend
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger.monitoring.svc.cluster.local:4317"
+
+envFromSecrets:
+  - secretName: mlflow-secret
+    keys:
+      - MLFLOW_TRACKING_URI
+      - MLFLOW_S3_ENDPOINT_URL
+  - secretName: aws-credentials
+    keys:
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+
+secrets:
+  create: false  
+  mlflowTrackingUri: ""
+  mlflowS3EndpointUrl: ""
+  awsAccessKeyId: ""
+  awsSecretAccessKey: ""
+  hfToken: ""
+
+livenessProbe:
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+readinessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: hallucination.local
+      paths:
+        - path: /
+          pathType: Prefix

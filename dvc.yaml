@@ -1,0 +1,40 @@
+# dvc.yaml
+stages:
+  embed:
+    cmd: python notebooks/embed_phobert.py
+    deps:
+      - notebooks/embed_phobert.py
+      - data/vihallu-dataset/vihallu-train.csv
+    outs:
+      - features/phobert_embeddings.npy
+
+  train:
+    cmd: python notebooks/train-model-vihallu.py
+    deps:
+      - notebooks/train-model-vihallu.py
+      - features/phobert_embeddings.npy
+      - data/vihallu-dataset/vihallu-train.csv
+      - data/vihallu-vistral-dataset/vistral_train_predictions_with_probs.csv
+    outs:
+      - models/lgbm
+      - models/metadata.yaml
+      - models/feature_schema.json
+
+  infer:
+    cmd: python notebooks/infer-model-vihallu.py
+    deps:
+      - notebooks/infer-model-vihallu.py
+      - features/phobert_embeddings.npy
+      - data/vihallu-dataset/vihallu-train.csv
+      - data/vihallu-vistral-dataset/vistral_train_predictions_with_probs.csv
+      - models/lgbm
+      - models/feature_schema.json
+    outs:
+      - predictions/vihallu_infer_predictions.csv
+
+  promote:
+    cmd: python scripts/auto_promote_registry.py
+    deps:
+      - scripts/auto_promote_registry.py
+      - models/metadata.yaml
+    always_changed: true

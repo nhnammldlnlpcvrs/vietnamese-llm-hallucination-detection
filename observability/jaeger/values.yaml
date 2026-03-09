@@ -1,0 +1,52 @@
+# observability/jaeger/values.yaml
+# Helm chart: jaegertracing/jaeger
+# helm repo add jaegertracing https://jaegertracing.github.io/helm-charts
+
+jaeger:
+  allInOne:
+    enabled: true
+    image:
+      tag: "1.54.0"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # Environment config for memory storage
+    extraEnv:
+      - name: COLLECTOR_OTLP_ENABLED
+        value: "true"
+      - name: SPAN_STORAGE_TYPE
+        value: memory
+      - name: MEMORY_MAX_TRACES
+        value: "50000"
+    # Annotations for Prometheus scraping
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "14269"
+
+  storage:
+    type: memory
+
+  agent:
+    enabled: false
+
+  collector:
+    enabled: false
+
+  query:
+    enabled: false
+    basePath: /jaeger
+
+  ingress:
+    enabled: false   # expose qua NGINX ingress trong K8s
+
+  # gRPC: 4317
+  # HTTP: 4318
+  # Jaeger UI: 16686
+  # Zipkin: 9411
+
+  service:
+    type: ClusterIP

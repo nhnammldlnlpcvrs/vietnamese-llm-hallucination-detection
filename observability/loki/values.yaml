@@ -1,0 +1,86 @@
+# observability/loki/values.yaml
+# Helm chart: grafana/loki-stack
+# helm repo add grafana https://grafana.github.io/helm-charts
+
+loki-stack:
+  loki:
+    enabled: true
+    isDefault: false
+    auth_enabled: false
+
+    commonConfig:
+      replication_factor: 1
+
+    storage:
+      type: filesystem
+
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9096
+
+    limits_config:
+      retention_period: 744h    # 31 days
+      ingestion_rate_mb: 8
+      ingestion_burst_size_mb: 16
+
+    compactor:
+      retention_enabled: true
+
+    # Structured metadata for trace correlation
+    schema_config:
+      configs:
+        - from: "2024-01-01"
+          store: boltdb-shipper
+          object_store: filesystem
+          schema: v12
+          index:
+            prefix: index_
+            period: 24h
+
+  # Promtail — collects logs from all pods
+  promtail:
+    enabled: true
+    config:
+      # Fixed: use hardcoded service name, not Go template
+      clients:
+        - url: http://loki-stack:3100/loki/api/v1/push
+
+      snippets:
+        pipelineStages:
+          - docker: {}
+          # Parse JSON logs from FastAPI
+          - json:
+              expressions:
+                level: level
+                trace_id: trace_id
+                request_id: request_id
+                service: service
+          - labels:
+              level:
+              trace_id:
+              service:
+
+      # Collect from hallucination namespace only
+      scrapeConfigs:
+        - job_name: hallucination-pods
+          kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names:
+                  - hallucination-prod
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_name]
+              target_label: pod
+            - source_labels: [__meta_kubernetes_namespace]
+              target_label: namespace
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              target_label: app
+          pipeline_stages:
+            - docker: {}
+            - json:
+                expressions:
+                  level: level
+                  trace_id: trace_id
+            - labels:
+                level:
+                trace_id:

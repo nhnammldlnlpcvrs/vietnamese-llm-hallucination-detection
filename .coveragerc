@@ -1,0 +1,9 @@
+[run]
+omit =
+    tests/*
+    backend/model/inference_model.py
+    backend/kserve_adapter.py
+    
+[report]
+fail_under = 80
+show_missing = True

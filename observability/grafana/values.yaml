@@ -1,0 +1,76 @@
+# observability/grafana/values.yaml
+# Helm chart: grafana/grafana
+# helm repo add grafana https://grafana.github.io/helm-charts
+
+grafana:
+  fullnameOverride: grafana
+
+  adminUser: admin
+  adminPassword: admin123   # override bằng K8s secret trong production
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  persistence:
+    enabled: true
+    size: 2Gi
+
+  # Datasources provisioned automatically
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          uid: prometheus
+          url: http://monitoring-stack-prometheus:9090
+          isDefault: true
+          access: proxy
+          editable: false
+
+        - name: Loki
+          type: loki
+          uid: loki
+          url: http://loki-stack:3100
+          access: proxy
+          editable: false
+          jsonData:
+            derivedFields:
+              - datasourceUid: jaeger
+                matcherRegex: '"trace_id":"(\w+)"'
+                name: TraceID
+                url: "$${__value.raw}"
+
+        - name: Jaeger
+          type: jaeger
+          uid: jaeger
+          url: http://jaeger-allInOne:16686
+          access: proxy
+          editable: false
+
+  # Dashboard providers
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: hallucination-dashboards
+          folder: "Hallucination Service"
+          type: file
+          disableDeletion: false
+          updateIntervalSeconds: 30
+          options:
+            path: /var/lib/grafana/dashboards/hallucination
+
+  # Mount dashboard JSON files
+  dashboardsConfigMaps:
+    hallucination: grafana-dashboards-cm
+
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/grafana"
+      serve_from_sub_path: true
+    auth.anonymous:
+      enabled: false
+    explore:
+      enabled: true

@@ -1,0 +1,20 @@
+{
+  "feature_dim": 778,
+  "components": {
+    "phobert_embeddings": 768,
+    "simple_features": 6,
+    "cosine_similarity": 1,
+    "vistral_probs": 3
+  },
+  "label_map": {
+    "extrinsic": 0,
+    "no": 1,
+    "intrinsic": 2
+  },
+  "column_order": [
+    "phobert_embeddings",
+    "simple_features",
+    "cosine_similarity",
+    "vistral_probs"
+  ]
+}
