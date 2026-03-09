@@ -48,3 +48,4 @@ config-for-jenkins/**/secrets*
 config-for-jenkins/**/credentials*
 config_flat
 auth-file
+imgs/
