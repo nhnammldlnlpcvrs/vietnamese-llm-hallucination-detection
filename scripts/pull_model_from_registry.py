@@ -27,7 +27,7 @@ from mlflow.tracking import MlflowClient
 
 MODEL_NAME   = os.getenv("MLFLOW_MODEL_NAME", "vihallu-detector")
 MODEL_ALIAS  = os.getenv("MLFLOW_MODEL_ALIAS", "production")
-DOWNLOAD_DIR = os.getenv("MODEL_STORE_DIR", "models")
+DOWNLOAD_DIR = os.getenv("MODEL_STORE_DIR", "backend/model_store")
 
 def main() -> None:
     tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
