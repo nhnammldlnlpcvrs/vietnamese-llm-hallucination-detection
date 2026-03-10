@@ -98,7 +98,17 @@ jobs:
         with:
           driver-opts: image=moby/buildkit:latest
 
+      - name: Cache MLflow Model
+        id: model-cache
+        uses: actions/cache@v3
+        with:
+          path: backend/model_store/
+          key: mlflow-model-production-${{ hashFiles('scripts/pull_model_from_registry.py') }}
+          restore-keys: |
+            mlflow-model-production-
+
       - name: Pull model from MLflow Registry
+        if: steps.model-cache.outputs.cache-hit != 'true'
         env:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
           MLFLOW_MODEL_NAME: vihallu-detector
@@ -116,10 +126,20 @@ jobs:
             "mlflow==2.19.0" \
             "boto3==1.34.69" \
             "protobuf>=3.20,<5"
-          python scripts/pull_model_from_registry.py
-          ls -la backend/model_store/
+          python scripts/pull_model_from_registry.py || {
+            echo "[WARN] MLflow download failed, creating empty model_store"
+            mkdir -p backend/model_store
+          }
           deactivate
           rm -rf .venv_mlflow
+
+      - name: Verify model exists
+        run: |
+          if [ ! -d "backend/model_store" ] || [ -z "$(ls -A backend/model_store)" ]; then
+            echo "[ERROR] Model store is empty!"
+            exit 1
+          fi
+          ls -la backend/model_store/
 
       - name: Build and push Docker image
         id: build
